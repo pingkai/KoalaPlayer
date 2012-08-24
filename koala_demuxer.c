@@ -97,7 +97,7 @@ void regist_input_file_func(koala_handle *pHandle,void *opaque,int (*read_packet
 								
 }
 
-int fill_stream_table(koala_handle *pHandle){
+static int fill_stream_table(koala_handle *pHandle){
 	int i;
 	for(i = 0;i<pHandle->ctx->nb_streams;i++){
 		if (pHandle->ctx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO){
@@ -321,7 +321,6 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 				*pSize = 0;
 				memcpy(pBuffer + (*pSize),pHandle->pkt->data,pHandle->pkt->size);
 				*pSize += pHandle->pkt->size;		
-				//err = write(pHandle->afd, pHandle->pkt->data, pHandle->pkt->size);
 			}
 			*pPts = pHandle->pkt->pts*1000/pHandle->a_time_base;
 			break;
@@ -339,80 +338,9 @@ static void init_handle(koala_handle *pHandle){
 	memset(pHandle,0,sizeof(koala_handle));
 	pHandle->audio_stream = -1;
 	pHandle->video_stream = -1;
-//	pHandle->first_pts = -1;
 }
 koala_handle * koala_get_demux_handle(){
 	koala_handle *pHandle = av_malloc(sizeof(koala_handle));
 	init_handle(pHandle);
 	return pHandle;
 }
-#if 0
-static int read_data(void *opaque, uint8_t *buf, int buf_size){
-	int ret;
-	int fd = *(int *)opaque;
-	ret = read(fd,buf,buf_size);
-	return ret;
-}
-
-static int64_t seek(void *opaque, int64_t offset, int whence){
-	int ret;
-	int fd = *(int *)opaque;
-	ret = lseek(fd,offset,whence);
-	return ret;
-}
-
-int main(int argc, char **argv)
-{
-	int err;
-	int size;
-	uint8_t *pkt_buf = malloc(MAX_PKT_SIZE);
-	koala_handle *pHandle;
-	int stream_index;
-	int64_t pts;
-	int ifd;
-	int NbAudio,NbVideo;
-	int v_index, a_index;
-	if (argc <2){
-		printf("%s filename\n",argv[0]);
-		return 1;
-	}
-	ifd = open(argv[1], O_RDONLY);
-	if (ifd < 0){
-		printf("%s:%d\n",__FILE__,__LINE__);
-		return 0;
-	}
-	pHandle = koala_get_demux_handle();
-
-	regist_input_file_func(pHandle,&ifd,read_data,seek);
-
-	err = init_open(pHandle);
-	if (err < 0){
-		printf("%s:%d\n",__FILE__,__LINE__);
-		return 0;
-	}
-	get_nb_stream(pHandle,&NbAudio,&NbVideo);
-	if (NbAudio > 0)
-		a_index = open_audio(pHandle,0);
-	if (NbVideo > 0)
-		v_index = open_video(pHandle,0);
-	while(1){
-		size = MAX_PKT_SIZE;
-		err = demux_read_packet(pHandle,pkt_buf,&size,&stream_index,&pts);
-		if (err < 0){
-			// TODO: flush ?
-			break;
-		}
-		if (stream_index == v_index)
-			printf("V size is %d,pts is %lld\n",size,pts);
-		else if (stream_index == a_index)
-			printf("A size is %d,pts is %lld\n",size,pts);
-		else
-			printf("Other\n");
-	}
-	close_demux(pHandle);
-	if (ifd)
-		close(ifd);
-	free(pkt_buf);
-	return 0;
-}
-#endif

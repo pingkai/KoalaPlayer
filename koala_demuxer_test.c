@@ -68,9 +68,17 @@ int main(int argc, char **argv)
 			break;
 		}
 		if (stream_index == v_index)
+#if (__WORDSIZE == 64)
+			printf("V size is %d,pts is %ld\n",size,pts);
+#else
 			printf("V size is %d,pts is %lld\n",size,pts);
+#endif
 		else if (stream_index == a_index)
+#if (__WORDSIZE == 64)
+			printf("A size is %d,pts is %ld\n",size,pts);
+#else
 			printf("A size is %d,pts is %lld\n",size,pts);
+#endif
 		else
 			printf("Other\n");
 	}
