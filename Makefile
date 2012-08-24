@@ -1,5 +1,5 @@
 CC := gcc
-OBJS := koala_demuxer.o
+OBJS := koala_demuxer_test.o koala_demuxer.o 
 LDFLAGS = -lavformat -lavcodec -lavutil -lz -lpthread -lbz2 -lm 
 CFLAGS :=  -Wall -g
 koala_demuxer_test : $(OBJS)

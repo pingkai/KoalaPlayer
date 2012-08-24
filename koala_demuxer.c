@@ -32,7 +32,7 @@
 #define MUXER_ES
 #define AVP_BUFFSIZE 4096
 #define INITIAL_BUFFER_SIZE 32768
-#define  MAX_PKT_SIZE   1024*1024
+
 
 
 
@@ -346,7 +346,7 @@ koala_handle * koala_get_demux_handle(){
 	init_handle(pHandle);
 	return pHandle;
 }
-
+#if 0
 static int read_data(void *opaque, uint8_t *buf, int buf_size){
 	int ret;
 	int fd = *(int *)opaque;
@@ -415,3 +415,4 @@ int main(int argc, char **argv)
 	free(pkt_buf);
 	return 0;
 }
+#endif
