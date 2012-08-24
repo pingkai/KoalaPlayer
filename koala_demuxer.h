@@ -1,4 +1,7 @@
 
+
+#ifndef KOALA_DEMUXER_H
+#define KOALA_DEMUXER_H
 typedef struct koala_handle_ koala_handle;
 koala_handle * koala_get_demux_handle();
 
@@ -14,6 +17,6 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 
 void close_demux(koala_handle *pHandle);
 
-
+#endif
 
 
