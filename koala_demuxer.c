@@ -29,6 +29,8 @@
 #include "libavutil/intreadwrite.h"
 
 #include "libavformat/avformat.h"
+#include "koala_demuxer.h"
+
 #define MUXER_ES
 #define AVP_BUFFSIZE 4096
 #define INITIAL_BUFFER_SIZE 32768
@@ -39,6 +41,7 @@
 
 typedef struct koala_handle_t{
 	AVIOContext *in_put_pb;
+	int  interruptIO;
 	uint8_t* read_buffer; //in put buffer cache
 	AVFormatContext *ctx;
 	AVPacket *pkt;
@@ -102,9 +105,7 @@ void regist_input_file_func(koala_handle *pHandle,void *opaque,int (*read_packet
 	pHandle->read_packet = read_packet;
 	pHandle->seek = seek;
 	pHandle->opaque = opaque;
-	return;
-	
-								
+	return;								
 }
 
 static int fill_stream_table(koala_handle *pHandle){
@@ -120,34 +121,55 @@ static int fill_stream_table(koala_handle *pHandle){
 	
 	return 0;
 }
-
-int init_open(koala_handle *pHandle){
+static int interrupt_cb(void *opaque){
+	koala_handle *pHandle = (koala_handle *)opaque;
+	// TODO: use a lock?
+	if (pHandle->interruptIO){
+		pHandle->interruptIO = 0;
+		return 1;
+	}else
+    	return 0;
+}
+void interrupt_demuxer(koala_handle *pHandle){
+	pHandle->interruptIO = 1;
+	return;
+}
+int init_open(koala_handle *pHandle,const char *filename){
 	int ret;
 	AVInputFormat *in_fmt = NULL;
+	int use_filename = 0;
 	pHandle->read_buffer = av_malloc(INITIAL_BUFFER_SIZE);
-	if (pHandle->read_buffer == NULL)
-		return -1;
-	if (pHandle->read_packet == NULL){
+	if (pHandle->read_packet == NULL ){
 		printf("%s:%d no read func\n",__FILE__,__LINE__);
-		// TODO: open with filename
-		return -1;
+		if (filename == NULL)
+			return -1;
+		else{
+			use_filename = 1;
+		}
 	}
 	pHandle->ctx = avformat_alloc_context();
+	pHandle->ctx->interrupt_callback.callback = interrupt_cb;
+	pHandle->ctx->interrupt_callback.opaque = pHandle;
 	av_register_all();
-
-	pHandle->in_put_pb = avio_alloc_context(pHandle->read_buffer, INITIAL_BUFFER_SIZE,0, pHandle->opaque, pHandle->read_packet, NULL, pHandle->seek);
-	if (pHandle->seek)
-		pHandle->in_put_pb->seekable = 1;
+	avformat_network_init();
+	if (!use_filename){
+		pHandle->in_put_pb = avio_alloc_context(pHandle->read_buffer, INITIAL_BUFFER_SIZE,0, pHandle->opaque, pHandle->read_packet, NULL, pHandle->seek);
+		if (pHandle->seek)
+			pHandle->in_put_pb->seekable = 1;
+		else
+			pHandle->in_put_pb->seekable = 0;
+		ret = av_probe_input_buffer(pHandle->in_put_pb, &in_fmt, NULL,NULL, 0, 0);
+		if (ret < 0) {
+			printf("%s:%d\n",__FILE__,__LINE__);
+		    goto fail;
+	    }
+		printf("in_fmt->name %s\n",in_fmt->name);
+		pHandle->ctx->pb = pHandle->in_put_pb;
+	}
+	if (!use_filename)
+    	ret = avformat_open_input(&pHandle->ctx, NULL, in_fmt, NULL);
 	else
-		pHandle->in_put_pb->seekable = 0;
-	ret = av_probe_input_buffer(pHandle->in_put_pb, &in_fmt, NULL,NULL, 0, 0);
-	if (ret < 0) {
-		printf("%s:%d\n",__FILE__,__LINE__);
-	    goto fail;
-    }
-	printf("in_fmt->name %s\n",in_fmt->name);
-	pHandle->ctx->pb = pHandle->in_put_pb;
-    ret = avformat_open_input(&pHandle->ctx, NULL, in_fmt, NULL);
+		ret = avformat_open_input(&pHandle->ctx, filename, NULL, NULL);
     if (ret < 0){
 		printf("%s:%d ret is %d\n",__FILE__,__LINE__,ret);
         goto fail;
@@ -242,7 +264,7 @@ int open_audio(koala_handle *pHandle,int index){
 }
 
 int open_video(koala_handle *pHandle,int index){
-	int err = 0;
+	int err ;
 	if (index >= pHandle->nb_video_stream || index < 0){
 		printf("%s:%d No such video\n",__FILE__,__LINE__);
 		return -1;
@@ -256,14 +278,22 @@ int open_video(koala_handle *pHandle,int index){
 	&&(pHandle->vc->extradata[0] == 1)){
 	    uint8_t *dummy_p;
 	    int dummy_int;
+	//	int i;
 		AVBitStreamFilterContext *bsfc= av_bitstream_filter_init("h264_mp4toannexb");
 		if (!bsfc) {
 			av_log(NULL, AV_LOG_ERROR, "Cannot open the h264_mp4toannexb BSF!\n");
 			return -1;
 		}
+	//	for(i = 0; i< pHandle->vc->extradata_size;i++)
+	//		printf("%02x ",pHandle->vc->extradata[i]);
+	//	printf("\n");
 	    err = av_bitstream_filter_filter(bsfc, pHandle->vc, NULL, &dummy_p, &dummy_int, NULL, 0, 0);
-		if (err < 0)
-			printf("av_bitstream_filter_filter error\n");
+	//	if (err < 0)
+	//		printf("av_bitstream_filter_filter error\n");
+	//	for(i = 0; i< pHandle->vc->extradata_size;i++)
+	//		printf("%02x ",pHandle->vc->extradata[i]);
+	//	printf("\n");
+
 	    av_bitstream_filter_close(bsfc);
 		pHandle->write_h264_sps_pps = 1;
 		pHandle->write_h264_startcode =1;
@@ -271,8 +301,8 @@ int open_video(koala_handle *pHandle,int index){
 	if (pHandle->vc->codec_id == CODEC_ID_MPEG4){
 		pHandle->mp4_vol = 1;
 	}
-	if (err < 0)
-		return -1;
+//	if (err < 0)
+//		return -1;
 	return pHandle->video_stream;
 }
 
@@ -286,6 +316,7 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 	pHandle->pPkt_buf = pBuffer;
 	pHandle->pPkt_buf_size  = pSize;
 	// when *pSize is not big enough only copy  *pSize,copy the left next time
+	// TODO: Maybe can use pkt,no need to mallloc and copy
 	if (pHandle->pkt_cache_buf){
 		int size = pHandle->pkt_cache_buf_size - pHandle->pkt_cache_buf_ptr;
 		if (size <= *pSize){
@@ -390,9 +421,7 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 			av_free_packet(pHandle->pkt);
 	}while(1);
 	av_free_packet(pHandle->pkt);
-
 	return 0;
-
 }
 
 static void init_handle(koala_handle *pHandle){
@@ -402,6 +431,8 @@ static void init_handle(koala_handle *pHandle){
 }
 koala_handle * koala_get_demux_handle(){
 	koala_handle *pHandle = av_malloc(sizeof(koala_handle));
+	if (pHandle == NULL)
+		return NULL;
 	init_handle(pHandle);
 	return pHandle;
 }
