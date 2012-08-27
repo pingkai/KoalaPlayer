@@ -9,7 +9,7 @@
 #include <stdint.h>
 #include "koala_demuxer.h"
 
-#define  MAX_PKT_SIZE   1024*1024
+#define  MAX_PKT_SIZE   1024*10
 
 
 static int read_data(void *opaque, uint8_t *buf, int buf_size){

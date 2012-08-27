@@ -2,7 +2,7 @@
 
 #ifndef KOALA_DEMUXER_H
 #define KOALA_DEMUXER_H
-typedef struct koala_handle_ koala_handle;
+typedef struct koala_handle_t koala_handle;
 koala_handle * koala_get_demux_handle();
 
 void regist_input_file_func(koala_handle *pHandle,void *opaque,int (*read_packet)(void *opaque, uint8_t *buf, int buf_size),

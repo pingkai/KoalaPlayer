@@ -33,10 +33,11 @@
 #define AVP_BUFFSIZE 4096
 #define INITIAL_BUFFER_SIZE 32768
 
+#define PKT_CACHE_BUF_SIZE 1024*1024*5
 
 
 
-typedef struct {
+typedef struct koala_handle_t{
 	AVIOContext *in_put_pb;
 	uint8_t* read_buffer; //in put buffer cache
 	AVFormatContext *ctx;
@@ -50,6 +51,10 @@ typedef struct {
 	int nb_audio_stream;
 	char * video_stream_list;
 	char * audio_stream_list;
+	uint8_t * pkt_cache_buf;
+	int  pkt_cache_buf_ptr;
+	int  pkt_cache_buf_size;
+	int pkt_cache_buf_stream_index;
 
 	
 	AVFormatContext *oc; //raw audio data to es use it
@@ -63,8 +68,8 @@ typedef struct {
 	int write_h264_sps_pps;
 	int write_h264_startcode;
 	int mp4_vol;//mpeg4 video header
-	uint8_t *pPkt_buf;
-	int *pPkt_buf_size;
+	uint8_t *pPkt_buf; //for audio muxer callback
+	int *pPkt_buf_size;//for audio muxer callback
 
 	//get in put data callback
 	int (*read_packet)(void *opaque, uint8_t *buf, int buf_size);
@@ -78,11 +83,16 @@ static int probe_buf_write(void *opaque, uint8_t *buf, int buf_size)
 {
 	koala_handle *pHandle = (koala_handle *)opaque;
 	if ((*pHandle->pPkt_buf_size) < buf_size){
-		printf("%s:%d buf_size is %d pPkt_buf_size is %d\n",__FILE__,__LINE__,buf_size,*pHandle->pPkt_buf_size);
+		pHandle->pkt_cache_buf_size = buf_size - *pHandle->pPkt_buf_size;
+//		printf("%s:%d buf_size is %d pPkt_buf_size is %d\n",__FILE__,__LINE__,buf_size,*pHandle->pPkt_buf_size);
+		pHandle->pkt_cache_buf = malloc (pHandle->pkt_cache_buf_size);
+		memcpy(pHandle->pPkt_buf,buf,*pHandle->pPkt_buf_size);
+		memcpy(pHandle->pkt_cache_buf,buf + *pHandle->pPkt_buf_size,pHandle->pkt_cache_buf_size);
+		pHandle->pkt_cache_buf_ptr = 0;
+	}else{
+    	memcpy(pHandle->pPkt_buf,buf,buf_size);
+		*(pHandle->pPkt_buf_size) = buf_size;
 	}
-
-    memcpy(pHandle->pPkt_buf,buf,buf_size);
-	*(pHandle->pPkt_buf_size) = buf_size;
     return 0;
 }
 
@@ -265,18 +275,41 @@ int open_video(koala_handle *pHandle,int index){
 		return -1;
 	return pHandle->video_stream;
 }
+
+// TODO: deal with malloc error
 int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pStream,int64_t *pPts){
 	int err;
 	int keyframe;
 	uint8_t startcode[4] = {0,0,0,1};
-	// TODO: when *pSize is not big enough only copy  *pSize,copy the left next time
+	int in_buf_ptr = 0;
+
+	pHandle->pPkt_buf = pBuffer;
+	pHandle->pPkt_buf_size  = pSize;
+	// when *pSize is not big enough only copy  *pSize,copy the left next time
+	if (pHandle->pkt_cache_buf){
+		int size = pHandle->pkt_cache_buf_size - pHandle->pkt_cache_buf_ptr;
+		if (size <= *pSize){
+			memcpy(pBuffer,pHandle->pkt_cache_buf + pHandle->pkt_cache_buf_ptr,size);
+			free(pHandle->pkt_cache_buf);
+			pHandle->pkt_cache_buf = NULL;
+			pHandle->pkt_cache_buf_ptr = 0;
+			pHandle->pkt_cache_buf_size = 0;
+			*pSize = size;
+		}else{
+			memcpy(pBuffer,pHandle->pkt_cache_buf + pHandle->pkt_cache_buf_ptr,*pSize);
+			pHandle->pkt_cache_buf_ptr += *pSize;
+		}
+		*pPts = 0;
+		*pStream = pHandle->pkt_cache_buf_stream_index;
+		return 0;
+	}
+
 	do{
 		err = av_read_frame(pHandle->ctx, pHandle->pkt);
 		if (err < 0)
 			return -1;
-		pHandle->pPkt_buf = pBuffer;
-		pHandle->pPkt_buf_size  = pSize;
 		*pStream = pHandle->pkt->stream_index;
+		pHandle->pkt_cache_buf_stream_index = *pStream;
 
 		if (pHandle->pkt->stream_index == pHandle->video_stream){
 			if (pHandle->pkt->flags &AV_PKT_FLAG_KEY)
@@ -285,30 +318,46 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 				keyframe = 0;
 			pHandle->pkt->pts = pHandle->pkt->pts*1000 /pHandle->v_time_base;//ms
 			*pPts = pHandle->pkt->pts;
-			*pSize = 0;
+			if (*pSize < (pHandle->vc->extradata_size + pHandle->pkt->size)){
 
+				// TODO:  size = pHandle->vc->extradata_size + pHandle->pkt->size -*pSize
+				pHandle->pkt_cache_buf_size = pHandle->vc->extradata_size + pHandle->pkt->size;
+				pHandle->pkt_cache_buf = malloc(pHandle->pkt_cache_buf_size);
+				if (pHandle->pkt_cache_buf == NULL){
+					perror("malloc");
+					return -1;
+				}
+				pHandle->pPkt_buf = pHandle->pkt_cache_buf;
+			}
 			if (pHandle->vc->codec_id == CODEC_ID_MPEG4 && keyframe &&pHandle->mp4_vol){
-				memcpy(pBuffer+(*pSize),pHandle->vc->extradata ,pHandle->vc->extradata_size);
-				*pSize += pHandle->vc->extradata_size;
+				memcpy(pHandle->pPkt_buf+ in_buf_ptr ,pHandle->vc->extradata ,pHandle->vc->extradata_size);
+				in_buf_ptr += pHandle->vc->extradata_size;
 			}
 
 			if (pHandle->write_h264_sps_pps && keyframe){
-				memcpy(pBuffer + (*pSize),pHandle->vc->extradata ,pHandle->vc->extradata_size);
-				*pSize += pHandle->vc->extradata_size;
-				memcpy(pBuffer + (*pSize),startcode,4);
-				*pSize +=4;
-				memcpy(pBuffer + (*pSize),pHandle->pkt->data+4,pHandle->pkt->size-4);
-				*pSize += (pHandle->pkt->size-4);
+				memcpy(pHandle->pPkt_buf + (in_buf_ptr),pHandle->vc->extradata ,pHandle->vc->extradata_size);
+				in_buf_ptr += pHandle->vc->extradata_size;
+				memcpy(pHandle->pPkt_buf + (in_buf_ptr),startcode,4);
+				in_buf_ptr +=4;
+				memcpy(pHandle->pPkt_buf + (in_buf_ptr),pHandle->pkt->data+4,pHandle->pkt->size-4);
+				in_buf_ptr += (pHandle->pkt->size-4);
 			}else{
 				if (pHandle->write_h264_startcode){
-					memcpy(pBuffer + (*pSize),startcode,4);
-					*pSize += 4;			
-					memcpy(pBuffer + (*pSize),pHandle->pkt->data+4,pHandle->pkt->size-4);
-					*pSize += (pHandle->pkt->size-4);				
+					memcpy(pHandle->pPkt_buf + (in_buf_ptr),startcode,4);
+					in_buf_ptr += 4;			
+					memcpy(pHandle->pPkt_buf + (in_buf_ptr),pHandle->pkt->data+4,pHandle->pkt->size-4);
+					in_buf_ptr += (pHandle->pkt->size-4);				
 				}else{
-					memcpy(pBuffer + (*pSize),pHandle->pkt->data,pHandle->pkt->size);
-					*pSize += pHandle->pkt->size;
+					memcpy(pHandle->pPkt_buf + in_buf_ptr,pHandle->pkt->data,pHandle->pkt->size);
+					in_buf_ptr += pHandle->pkt->size;
 				}
+			}
+
+			if (pHandle->pPkt_buf == pHandle->pkt_cache_buf){
+				memcpy(pBuffer,pHandle->pPkt_buf,*pSize);
+				pHandle->pkt_cache_buf_ptr = *pSize;
+			}else{
+				*pSize = in_buf_ptr;
 			}
 			break;
 		}
@@ -318,16 +367,28 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 				av_write_frame(pHandle->oc,pHandle->pkt);
 				pHandle->pkt->stream_index = pHandle->audio_stream;
 			}else{
-				*pSize = 0;
-				memcpy(pBuffer + (*pSize),pHandle->pkt->data,pHandle->pkt->size);
-				*pSize += pHandle->pkt->size;		
+			//	*pSize = 0;
+				if (*pSize < pHandle->pkt->size){
+					pHandle->pkt_cache_buf_size = pHandle->pkt->size - *pSize;
+					pHandle->pkt_cache_buf = malloc(pHandle->pkt_cache_buf_size);
+					if (pHandle->pkt_cache_buf == NULL){
+						perror("malloc");
+						return -1;
+					}
+					memcpy(pHandle->pPkt_buf + in_buf_ptr,pHandle->pkt->data,*pSize);
+					memcpy(pHandle->pkt_cache_buf,pHandle->pkt->data + *pSize,pHandle->pkt_cache_buf_size);
+					
+				}else{
+					memcpy(pHandle->pPkt_buf + in_buf_ptr,pHandle->pkt->data,pHandle->pkt->size);
+					in_buf_ptr += pHandle->pkt->size;
+					*pSize = in_buf_ptr;
+				}
 			}
 			*pPts = pHandle->pkt->pts*1000/pHandle->a_time_base;
 			break;
 		}else
 			av_free_packet(pHandle->pkt);
 	}while(1);
-	// TODO: when *pSize is not big enough only copy  *pSize,copy the left next time,when pkt is out puted over free it 
 	av_free_packet(pHandle->pkt);
 
 	return 0;
