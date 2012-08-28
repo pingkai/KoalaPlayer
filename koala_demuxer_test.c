@@ -8,6 +8,8 @@
 #include <sys/types.h>
 #include <stdint.h>
 #include "koala_demuxer.h"
+#include "tty.h"
+
 
 #define  MAX_PKT_SIZE   1024*256
 
@@ -34,6 +36,7 @@ int main(int argc, char **argv)
 	koala_handle *pHandle;
 	int stream_index;
 	int64_t pts;
+	int flag,mode;
 	int ifd = 0;
 	int NbAudio,NbVideo;
 	int v_index, a_index;
@@ -43,8 +46,11 @@ int main(int argc, char **argv)
 		printf("%s filename\n",argv[0]);
 		return 1;
 	}
+	// TODO: DO in another thread
+	tty_set_noblock();
 	if (strncmp(argv[1],"http://",7) == 0 
 		||strncmp(argv[1],"rtsp://",7) == 0
+		|| strncmp(argv[1],"mms://",6) == 0
 		)
 		open_with_koala = 1;
 	afd  = open("audio.aac", O_WRONLY | O_CREAT, 0644);
@@ -66,22 +72,35 @@ int main(int argc, char **argv)
 	get_nb_stream(pHandle,&NbAudio,&NbVideo);
 	if (NbAudio > 0)
 		a_index = open_audio(pHandle,0);
-	if (NbVideo > 0)
+	if (NbVideo > 0){
+		mode = set_demuxer_mode(pHandle,DEMUX_MODE_I_FRAME);
 		v_index = open_video(pHandle,0);
+	}
 	while(1){
+		// TODO: DO in another thread
+		char ch;
+		ch = getchar();
+		if (ch =='q'){
+			if (open_with_koala)
+				interrupt_demuxer(pHandle);
+			break;	
+		}
+		// TODO:  DO in another thread end	
 		size = MAX_PKT_SIZE;
-		err = demux_read_packet(pHandle,pkt_buf,&size,&stream_index,&pts);
+		err = demux_read_packet(pHandle,pkt_buf,&size,&stream_index,&pts,&flag);
 		if (err < 0){
 			// TODO: flush ?
 			break;
 		}
 		if (stream_index == v_index){
 #if (__WORDSIZE == 64)
-			printf("V size is %d,pts is %ld\n",size,pts);
+	//		printf("V size is %d,pts is %ld\n",size,pts);
 #else
-			printf("V size is %d,pts is %lld\n",size,pts);
+	//		printf("V size is %d,pts is %lld\n",size,pts);
 #endif
-		write(vfd,pkt_buf,size);
+			if (mode == DEMUX_MODE_I_FRAME)
+				mode = set_demuxer_mode(pHandle,DEMUX_MODE_NORMOL);
+			write(vfd,pkt_buf,size);
 		}
 		else if (stream_index == a_index){
 #if (__WORDSIZE == 64)
@@ -89,7 +108,7 @@ int main(int argc, char **argv)
 #else
 		//	printf("A size is %d,pts is %lld\n",size,pts);
 #endif
-		write(afd,pkt_buf,size);
+			write(afd,pkt_buf,size);
 
 		}
 		else{
@@ -102,6 +121,8 @@ int main(int argc, char **argv)
 	close(afd);
 	close(vfd);
 	free(pkt_buf);
+	// TODO: DO in another thread
+	tty_reset();
 	return 0;
 }
 

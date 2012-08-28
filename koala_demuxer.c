@@ -42,6 +42,7 @@
 typedef struct koala_handle_t{
 	AVIOContext *in_put_pb;
 	int  interruptIO;
+	demux_mode_e demux_mode;
 	uint8_t* read_buffer; //in put buffer cache
 	AVFormatContext *ctx;
 	AVPacket *pkt;
@@ -220,6 +221,7 @@ int get_nb_stream(koala_handle *pHandle,int *pNbAudio, int *pNbVideo){
 
 int open_audio(koala_handle *pHandle,int index){ 
 	int err;
+	//int i;
 	if (index >= pHandle->nb_audio_stream || index < 0){
 		printf("%s:%d No such audio\n",__FILE__,__LINE__);
 		return -1;
@@ -262,9 +264,12 @@ int open_audio(koala_handle *pHandle,int index){
 	pHandle->a_time_base = pHandle->ctx->streams[pHandle->audio_stream]->time_base.den/pHandle->ctx->streams[pHandle->audio_stream]->time_base.num;
 	return pHandle->audio_stream;
 }
-
+int set_demuxer_mode(koala_handle *pHandle,demux_mode_e mode){
+	pHandle->demux_mode = mode;
+	return mode;
+}
 int open_video(koala_handle *pHandle,int index){
-	int err ;
+//	int i ;
 	if (index >= pHandle->nb_video_stream || index < 0){
 		printf("%s:%d No such video\n",__FILE__,__LINE__);
 		return -1;
@@ -275,7 +280,8 @@ int open_video(koala_handle *pHandle,int index){
 	// TODO: when switch video please close it, if not h264 or not need the filter
 	if ((pHandle->vc->codec_id == CODEC_ID_H264)
 	&& pHandle->vc->extradata != NULL 
-	&&(pHandle->vc->extradata[0] == 1)){
+	&&(pHandle->vc->extradata[0] == 1)
+	){
 	    uint8_t *dummy_p;
 	    int dummy_int;
 	//	int i;
@@ -287,7 +293,7 @@ int open_video(koala_handle *pHandle,int index){
 	//	for(i = 0; i< pHandle->vc->extradata_size;i++)
 	//		printf("%02x ",pHandle->vc->extradata[i]);
 	//	printf("\n");
-	    err = av_bitstream_filter_filter(bsfc, pHandle->vc, NULL, &dummy_p, &dummy_int, NULL, 0, 0);
+		av_bitstream_filter_filter(bsfc, pHandle->vc, NULL, &dummy_p, &dummy_int, NULL, 0, 0);
 	//	if (err < 0)
 	//		printf("av_bitstream_filter_filter error\n");
 	//	for(i = 0; i< pHandle->vc->extradata_size;i++)
@@ -307,7 +313,7 @@ int open_video(koala_handle *pHandle,int index){
 }
 
 // TODO: deal with malloc error
-int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pStream,int64_t *pPts){
+int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pStream,int64_t *pPts,int *pFlag){
 	int err;
 	int keyframe;
 	uint8_t startcode[4] = {0,0,0,1};
@@ -336,11 +342,21 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 	}
 
 	do{
+		if (interrupt_cb(pHandle)){
+			break;
+		}
 		err = av_read_frame(pHandle->ctx, pHandle->pkt);
 		if (err < 0)
 			return -1;
+		if (pHandle->demux_mode == DEMUX_MODE_I_FRAME){
+			if (pHandle->pkt->stream_index != pHandle->video_stream
+				||(pHandle->pkt->flags &AV_PKT_FLAG_KEY) == 0
+				)
+				continue;
+		}
 		*pStream = pHandle->pkt->stream_index;
 		pHandle->pkt_cache_buf_stream_index = *pStream;
+		*pFlag = pHandle->pkt->flags &AV_PKT_FLAG_KEY;
 
 		if (pHandle->pkt->stream_index == pHandle->video_stream){
 			if (pHandle->pkt->flags &AV_PKT_FLAG_KEY)
