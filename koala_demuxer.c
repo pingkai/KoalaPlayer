@@ -127,6 +127,7 @@ static int interrupt_cb(void *opaque){
 	// TODO: use a lock?
 	if (pHandle->interruptIO){
 		pHandle->interruptIO = 0;
+		printf("interrupted\n");
 		return 1;
 	}else
     	return 0;
@@ -135,6 +136,9 @@ void interrupt_demuxer(koala_handle *pHandle){
 	pHandle->interruptIO = 1;
 	return;
 }
+
+// TODO: How to deal with  interrupt ?
+
 int init_open(koala_handle *pHandle,const char *filename){
 	int ret;
 	AVInputFormat *in_fmt = NULL;
@@ -202,10 +206,18 @@ void close_demux(koala_handle *pHandle){
 		avio_flush(pHandle->oc->pb);
 		avformat_free_context(pHandle->oc);
 	}
-	avformat_close_input(&pHandle->ctx);
-	av_free(pHandle->pkt);
-	if (pHandle->audio_input_buffer)
+	if (pHandle->ctx){
+		avformat_close_input(&pHandle->ctx);
+		pHandle->ctx = NULL;
+	}
+	if (pHandle->pkt){
+		av_free(pHandle->pkt);
+		pHandle->pkt = NULL;
+	}
+	if (pHandle->audio_input_buffer){
 		av_free(pHandle->audio_input_buffer);
+		pHandle->audio_input_buffer = NULL;
+	}
 	av_free(pHandle);
 
 }
@@ -342,12 +354,17 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 	}
 
 	do{
+		// TODO: How to deal with  interrupt ?
 		if (interrupt_cb(pHandle)){
+			printf("%s:%d interrupt\n",__FILE__,__LINE__);
 			break;
 		}
+		// TODO: when be interrupt return what? AVERROR_EXIT? How to deal with it?
 		err = av_read_frame(pHandle->ctx, pHandle->pkt);
-		if (err < 0)
+		if (err < 0){
+			printf("%s:%d ret is %d\n",__FILE__,__LINE__,err);
 			return -1;
+		}
 		if (pHandle->demux_mode == DEMUX_MODE_I_FRAME){
 			if (pHandle->pkt->stream_index != pHandle->video_stream
 				||(pHandle->pkt->flags &AV_PKT_FLAG_KEY) == 0
