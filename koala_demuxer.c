@@ -25,10 +25,10 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "libavutil/time.h"
-#include "libavutil/intreadwrite.h"
+#include <libavutil/time.h>
+#include <libavutil/intreadwrite.h>
 
-#include "libavformat/avformat.h"
+#include <libavformat/avformat.h>
 #include "koala_demuxer.h"
 
 #define MUXER_ES
@@ -362,7 +362,19 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 		// TODO: when be interrupt return what? AVERROR_EXIT? How to deal with it?
 		err = av_read_frame(pHandle->ctx, pHandle->pkt);
 		if (err < 0){
-			printf("%s:%d ret is %d\n",__FILE__,__LINE__,err);
+            char errbuf[50];
+            av_strerror(err, errbuf, sizeof(errbuf));
+			printf("%s:%d: %s\n",__FILE__,__LINE__,errbuf);
+			if (err == AVERROR_EOF){
+				int ret;
+				ret = av_write_frame(pHandle->oc,NULL);
+				if (ret == 0){
+					*pPts = 0;
+					*pStream = pHandle->audio_stream;
+					*pFlag = 1;
+					return 0;
+				}
+			}
 			return -1;
 		}
 		if (pHandle->demux_mode == DEMUX_MODE_I_FRAME){
@@ -388,6 +400,7 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 				pHandle->pkt_cache_buf_size = pHandle->vc->extradata_size + pHandle->pkt->size;
 				pHandle->pkt_cache_buf = malloc(pHandle->pkt_cache_buf_size);
 				if (pHandle->pkt_cache_buf == NULL){
+					printf("%s:%d\n",__FILE__,__LINE__);
 					perror("malloc");
 					return -1;
 				}
@@ -436,6 +449,7 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 					pHandle->pkt_cache_buf_size = pHandle->pkt->size - *pSize;
 					pHandle->pkt_cache_buf = malloc(pHandle->pkt_cache_buf_size);
 					if (pHandle->pkt_cache_buf == NULL){
+						printf("%s:%d\n",__FILE__,__LINE__);
 						perror("malloc");
 						return -1;
 					}

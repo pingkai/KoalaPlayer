@@ -46,16 +46,17 @@ static void * control_thread(struct main_handle *pMainContent){
 			ch = getchar();
 			if (ch == -1)
 				usleep(100000);
-		}while (ch == -1 && !pMainContent->eos);
+		}while ((ch == -1 ||ch == '\n') && !pMainContent->eos);
 
 		switch (ch){
 			case 'q':
 				if (pMainContent->open_with_koala)
 					interrupt_demuxer(pMainContent->pKoalaHandle);
 				pMainContent->quite = 1;
+				printf("Quiting\n");
 				break;
 			default:
-				printf("unknown com %c\n",ch);
+				//printf("unknown command %c\n",ch);
 				break;
 				
 		}
