@@ -1,2 +1,11 @@
+put libav in the ../ dir
+make libav first
+
+cd src
+make
+
+cd ../test
+make
+
 rtsp 
 rtsp://220.242.27.14/tv/guangdongtiyu_1500.sdp
