@@ -29,7 +29,7 @@
 #include <libavutil/intreadwrite.h>
 
 #include <libavformat/avformat.h>
-#include "koala_demuxer.h"
+#include "../include/koala_demuxer.h"
 
 #define MUXER_ES
 #define AVP_BUFFSIZE 4096
@@ -228,9 +228,49 @@ int get_nb_stream(koala_handle *pHandle,int *pNbAudio, int *pNbVideo){
 		*pNbAudio = pHandle->nb_audio_stream;
 	if (pNbVideo)
 		*pNbVideo = pHandle->nb_video_stream;
-	return 0;
+	return pHandle->ctx->nb_streams;
 }
 
+static int stream_index2av_index(koala_handle *pHandle,enum AVMediaType type,int index){
+	int i = -1;
+	if (type == AVMEDIA_TYPE_VIDEO){
+		for (i = 0; i < pHandle->nb_video_stream;i++)
+			if (pHandle->video_stream_list[i]== index)
+				break;
+	}else if (type == AVMEDIA_TYPE_AUDIO){
+		for (i = 0; i < pHandle->nb_video_stream;i++)
+			if (pHandle->video_stream_list[i]== index)
+				break;
+	}
+	return i;
+}
+
+int open_stream(koala_handle *pHandle,int index){
+	int av_index;
+	enum AVMediaType codec_type = pHandle->ctx->streams[index]->codec->codec_type;
+
+	if (index >pHandle->ctx->nb_streams){
+		printf("No such stream");
+		return -1;
+	}
+
+	av_index = stream_index2av_index(pHandle,codec_type,index);
+	if (av_index < 0){
+		printf("Not support\n");
+		return -1;
+	}
+
+	switch (codec_type){
+		case AVMEDIA_TYPE_VIDEO:
+			return open_video(pHandle,av_index);
+		case AVMEDIA_TYPE_AUDIO:
+			return open_audio(pHandle,av_index);
+		default:
+			printf("Not support\n");
+			return -1;
+	}
+	return -1;
+}
 int open_audio(koala_handle *pHandle,int index){ 
 	int err;
 	//int i;
