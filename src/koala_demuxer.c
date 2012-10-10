@@ -31,6 +31,7 @@
 #include <libavformat/avformat.h>
 #include "../include/koala_demuxer.h"
 
+
 #define MUXER_ES
 #define AVP_BUFFSIZE 4096
 #define INITIAL_BUFFER_SIZE 32768
@@ -229,6 +230,18 @@ int get_nb_stream(koala_handle *pHandle,int *pNbAudio, int *pNbVideo){
 	if (pNbVideo)
 		*pNbVideo = pHandle->nb_video_stream;
 	return pHandle->ctx->nb_streams;
+}
+int get_stream_meta_by_index(koala_handle *pHandle,int index,stream_meta* meta){
+
+	enum AVMediaType codec_type = pHandle->ctx->streams[index]->codec->codec_type;
+	if (codec_type == AVMEDIA_TYPE_VIDEO){
+		meta->type = STREAM_TYPE_VIDEO;
+	}else if (codec_type == AVMEDIA_TYPE_AUDIO){
+		meta->type = STREAM_TYPE_AUDIO;
+	}else{
+		meta->type = STREAM_TYPE_UNKNOWN;
+	}
+	return 0;
 }
 
 static int stream_index2av_index(koala_handle *pHandle,enum AVMediaType type,int index){

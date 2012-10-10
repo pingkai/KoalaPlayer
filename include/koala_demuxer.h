@@ -1,12 +1,28 @@
 
-
 #ifndef KOALA_DEMUXER_H
 #define KOALA_DEMUXER_H
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 typedef struct koala_handle_t koala_handle;
 typedef enum {
 	DEMUX_MODE_NORMOL,
 	DEMUX_MODE_I_FRAME,
 } demux_mode_e;
+
+typedef enum {
+	STREAM_TYPE_UNKNOWN,
+	STREAM_TYPE_VIDEO,
+	STREAM_TYPE_AUDIO,
+} stream_type;
+
+typedef struct {
+	stream_type type;
+	
+}stream_meta;
+
 
 koala_handle * koala_get_demux_handle();
 
@@ -24,7 +40,11 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 
 void close_demux(koala_handle *pHandle);
 void interrupt_demuxer(koala_handle *pHandle);
+int get_stream_meta_by_index(koala_handle *pHandle,int index,stream_meta* meta);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif
 
