@@ -17,7 +17,12 @@
  * License along with Libav; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-
+//#define ANDROID
+#ifdef ANDROID
+#define LOG_TAG "koala_demuxer"
+#include <utils/Log.h>
+#define printf ALOGI
+#endif
 #include <limits.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -80,6 +85,7 @@ typedef struct koala_handle_t{
 	int (*read_packet)(void *opaque, uint8_t *buf, int buf_size);
 	int64_t (*seek)(void *opaque, int64_t offset, int whence);
 	void *opaque;
+	void (*log_callback)(void*, int, const char*, va_list);
 	
 	
 }koala_handle;
@@ -110,6 +116,10 @@ void regist_input_file_func(koala_handle *pHandle,void *opaque,int (*read_packet
 	return;								
 }
 
+void regist_log_call_back(koala_handle *pHandle,void (*callback)(void*, int, const char*, va_list)){
+	pHandle->log_callback = callback;
+	return;
+}
 static int fill_stream_table(koala_handle *pHandle){
 	int i;
 	for(i = 0;i<pHandle->ctx->nb_streams;i++){
@@ -156,6 +166,8 @@ int init_open(koala_handle *pHandle,const char *filename){
 	pHandle->ctx = avformat_alloc_context();
 	pHandle->ctx->interrupt_callback.callback = interrupt_cb;
 	pHandle->ctx->interrupt_callback.opaque = pHandle;
+	if (pHandle->log_callback)
+		av_log_set_callback(pHandle->log_callback);
 	av_register_all();
 	avformat_network_init();
 	if (!use_filename){
@@ -231,13 +243,42 @@ int get_nb_stream(koala_handle *pHandle,int *pNbAudio, int *pNbVideo){
 		*pNbVideo = pHandle->nb_video_stream;
 	return pHandle->ctx->nb_streams;
 }
-int get_stream_meta_by_index(koala_handle *pHandle,int index,stream_meta* meta){
 
-	enum AVMediaType codec_type = pHandle->ctx->streams[index]->codec->codec_type;
+static enum KoalaCodecID avcodec2Koalacodec(enum AVCodecID codec_id){
+	switch(codec_id){
+		case AV_CODEC_ID_H264:
+			return KOALA_CODEC_ID_H264;
+		case AV_CODEC_ID_AAC:
+		case AV_CODEC_ID_AAC_LATM:
+			return KOALA_CODEC_ID_AAC;
+		default:
+			break;
+	}
+	return  KOALA_CODEC_ID_NONE;
+}
+int get_stream_meta_by_index(koala_handle *pHandle,int index,stream_meta* meta){
+	
+	AVStream *pStream = pHandle->ctx->streams[index];
+	enum AVMediaType codec_type = pStream->codec->codec_type;
+//	pStream->codec->codec_id
+	printf("%s:%d pStream->codec->codec_id is %d\n",__FILE__,__LINE__,pStream->codec->codec_id);
+	// TODO: duration
+//	if (pStream->duration == 0)
+		meta->duration = pHandle->ctx->duration/(AV_TIME_BASE/1000);
+//	else{
+//		meta->duration = pStream->duration*(pStream->time_base.num/pStream->time_base.den);
+//	}
+	meta->codec = avcodec2Koalacodec(pStream->codec->codec_id);
 	if (codec_type == AVMEDIA_TYPE_VIDEO){
 		meta->type = STREAM_TYPE_VIDEO;
+		meta->width = pStream->codec->width;
+		meta->height = pStream->codec->height;
+		
 	}else if (codec_type == AVMEDIA_TYPE_AUDIO){
 		meta->type = STREAM_TYPE_AUDIO;
+		meta->channels = pStream->codec->channels;
+		meta->samplerate = pStream->codec->sample_rate;
+	//	meta->bitsample = pStream->codec->bi;
 	}else{
 		meta->type = STREAM_TYPE_UNKNOWN;
 	}
@@ -251,8 +292,8 @@ static int stream_index2av_index(koala_handle *pHandle,enum AVMediaType type,int
 			if (pHandle->video_stream_list[i]== index)
 				break;
 	}else if (type == AVMEDIA_TYPE_AUDIO){
-		for (i = 0; i < pHandle->nb_video_stream;i++)
-			if (pHandle->video_stream_list[i]== index)
+		for (i = 0; i < pHandle->nb_audio_stream;i++)
+			if (pHandle->audio_stream_list[i]== index)
 				break;
 	}
 	return i;
@@ -286,7 +327,6 @@ int open_stream(koala_handle *pHandle,int index){
 }
 int open_audio(koala_handle *pHandle,int index){ 
 	int err;
-	//int i;
 	if (index >= pHandle->nb_audio_stream || index < 0){
 		printf("%s:%d No such audio\n",__FILE__,__LINE__);
 		return -1;
@@ -297,13 +337,17 @@ int open_audio(koala_handle *pHandle,int index){
 	pHandle->ac = pHandle->ctx->streams[pHandle->audio_stream]->codec;
  
 	// TODO: when switch audio please close it, if not aac or not need the filter
-	if (pHandle->ac->codec_id == CODEC_ID_AAC){
+	if (pHandle->ac->codec_id == AV_CODEC_ID_AAC){
 	    pHandle->oc = avformat_alloc_context();
 	    if (!pHandle->oc) {
 	        fprintf(stderr, "Memory error\n");
 	        return -1;
 	    }
 		pHandle->oc->oformat = av_guess_format("adts", NULL, NULL);
+		if (pHandle->oc->oformat == NULL){
+			printf("%s:%d\n",__FILE__,__LINE__);
+			return -1;
+		}
 		pHandle->oc->pb = avio_alloc_context(pHandle->audio_input_buffer, AVP_BUFFSIZE,0, pHandle, NULL, probe_buf_write, NULL);
 		if (pHandle->oc->pb == NULL){
 			printf("%s:%d\n",__FILE__,__LINE__);
@@ -343,7 +387,7 @@ int open_video(koala_handle *pHandle,int index){
 	pHandle->vc = pHandle->ctx->streams[pHandle->video_stream]->codec;
 	pHandle->v_time_base = pHandle->ctx->streams[pHandle->video_stream]->time_base.den/pHandle->ctx->streams[pHandle->video_stream]->time_base.num;
 	// TODO: when switch video please close it, if not h264 or not need the filter
-	if ((pHandle->vc->codec_id == CODEC_ID_H264)
+	if ((pHandle->vc->codec_id == AV_CODEC_ID_H264)
 	&& pHandle->vc->extradata != NULL 
 	&&(pHandle->vc->extradata[0] == 1)
 	){

@@ -11,7 +11,7 @@ LOCAL_SRC_FILES:=                 \
 
 LOCAL_C_INCLUDES:=
 
-LOCAL_SHARED_LIBRARIES := libz 
+LOCAL_SHARED_LIBRARIES := libz liblog 
 #LOCAL_LDLIBS += libz libc
 LOCAL_MODULE:= libkoala
 LOCAL_MODULE_TAGS := optional

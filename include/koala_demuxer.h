@@ -18,8 +18,28 @@ typedef enum {
 	STREAM_TYPE_AUDIO,
 } stream_type;
 
+enum KoalaCodecID{
+	KOALA_CODEC_ID_NONE,
+	KOALA_CODEC_ID_H264,
+	KOALA_CODEC_ID_AAC,
+};
+
+
 typedef struct {
 	stream_type type;
+	int64_t duration;//ms
+	enum KoalaCodecID codec;
+
+
+	// TODO:  use union
+	//audio
+	int channels;
+	int samplerate;
+	int bitsample;
+
+	//video only
+	int width;
+	int height;
 	
 }stream_meta;
 
@@ -28,6 +48,8 @@ koala_handle * koala_get_demux_handle();
 
 void regist_input_file_func(koala_handle *pHandle,void *opaque,int (*read_packet)(void *opaque, uint8_t *buf, int buf_size),
 								int64_t (*seek)(void *opaque, int64_t offset, int whence));
+void regist_log_call_back(koala_handle *pHandle,void (*callback)(void*, int, const char*, va_list));
+
 int init_open(koala_handle *pHandle,const char *filename);
 int get_nb_stream(koala_handle *pHandle,int *pNbAudio, int *pNbVideo);
 
