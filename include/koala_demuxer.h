@@ -20,8 +20,12 @@ typedef enum {
 
 enum KoalaCodecID{
 	KOALA_CODEC_ID_NONE,
+	
 	KOALA_CODEC_ID_H264,
+
+	
 	KOALA_CODEC_ID_AAC,
+	KOALA_CODEC_ID_MP3,
 };
 
 
@@ -29,6 +33,7 @@ typedef struct {
 	stream_type type;
 	int64_t duration;//ms
 	enum KoalaCodecID codec;
+	int index;
 
 
 	// TODO:  use union
@@ -58,6 +63,8 @@ int set_demuxer_mode(koala_handle *pHandle,demux_mode_e mode);
 int open_stream(koala_handle *pHandle,int index);
 
 int open_video(koala_handle *pHandle,int index);
+int demux_seek(koala_handle *pHandle,int64_t timems,int stream_id);
+
 int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pStream,int64_t *pPts,int *pFlag);
 
 void close_demux(koala_handle *pHandle);
