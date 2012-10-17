@@ -35,6 +35,8 @@ static int read_data(void *opaque, uint8_t *buf, int buf_size){
 static int64_t seek(void *opaque, int64_t offset, int whence){
 	int ret;
 	int fd = *(int *)opaque;
+	if (whence == AVSEEK_SIZE)
+		return -1;
 	ret = lseek(fd,offset,whence);
 	return ret;
 }
