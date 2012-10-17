@@ -10,6 +10,7 @@
 #include <pthread.h>
 
 #include "koala_demuxer.h"
+#include "koala_type.h"
 #include "tty.h"
 
 

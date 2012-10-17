@@ -17,7 +17,8 @@ LOCAL_MODULE:= libkoala
 LOCAL_MODULE_TAGS := optional
 LOCAL_COPY_HEADERS_TO := libkoala
 LOCAL_COPY_HEADERS := \
-		../include/koala_demuxer.h
+		../include/koala_demuxer.h \
+		../include/koala_type.h
 ifeq ($(TARGET_ARCH),arm)
     LOCAL_CFLAGS += -Wno-psabi
 endif

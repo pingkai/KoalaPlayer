@@ -34,7 +34,7 @@
 #include <libavutil/intreadwrite.h>
 
 #include <libavformat/avformat.h>
-#include "../include/koala_demuxer.h"
+#include "../include/koala_type.h"
 
 
 #define MUXER_ES
