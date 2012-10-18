@@ -33,7 +33,7 @@ typedef struct {
 	//audio
 	int channels;
 	int samplerate;
-	int bitsample;
+	int profile;
 
 	//video only
 	int width;

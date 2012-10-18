@@ -28,6 +28,8 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 void close_demux(koala_handle *pHandle);
 void interrupt_demuxer(koala_handle *pHandle);
 int get_stream_meta_by_index(koala_handle *pHandle,int index,stream_meta* meta);
+int koala_sinff(const char * short_name,unsigned char *buf,int buf_size);
+
 
 #ifdef __cplusplus
 }

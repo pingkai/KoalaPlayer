@@ -285,7 +285,8 @@ int get_stream_meta_by_index(koala_handle *pHandle,int index,stream_meta* meta){
 		meta->type = STREAM_TYPE_AUDIO;
 		meta->channels = pStream->codec->channels;
 		meta->samplerate = pStream->codec->sample_rate;
-	//	meta->bitsample = pStream->codec->bi;
+		meta->profile = pStream->codec->profile;
+		printf("meta->profile is %d\n",meta->profile);
 	}else{
 		meta->type = STREAM_TYPE_UNKNOWN;
 	}
@@ -345,7 +346,7 @@ int open_audio(koala_handle *pHandle,int index){
 	pHandle->ac = pHandle->ctx->streams[pHandle->audio_stream]->codec;
  
 	// TODO: when switch audio please close it, if not aac or not need the filter
-	if (pHandle->ac->codec_id == AV_CODEC_ID_AAC){
+	if (0&&pHandle->ac->codec_id == AV_CODEC_ID_AAC){
 	    pHandle->oc = avformat_alloc_context();
 	    if (!pHandle->oc) {
 	        fprintf(stderr, "Memory error\n");
@@ -423,7 +424,7 @@ int open_video(koala_handle *pHandle,int index){
 		pHandle->write_h264_sps_pps = 1;
 		pHandle->write_h264_startcode =1;
 	}else 
-	if (pHandle->vc->codec_id == CODEC_ID_MPEG4){
+	if (pHandle->vc->codec_id == AV_CODEC_ID_MPEG4){
 		pHandle->mp4_vol = 1;
 	}
 //	if (err < 0)
@@ -506,7 +507,7 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
             char errbuf[50];
             av_strerror(err, errbuf, sizeof(errbuf));
 			printf("%s:%d: %s\n",__FILE__,__LINE__,errbuf);
-			if (err == AVERROR_EOF){
+			if (err == AVERROR_EOF &&(pHandle->oc->oformat != NULL )){
 				int ret;
 				ret = av_write_frame(pHandle->oc,NULL);
 				if (ret == 0){
@@ -582,7 +583,7 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 		}
 		else if (pHandle->pkt->stream_index == pHandle->audio_stream){
 		//	printf("audio pHandle->pkt->size is %d\n",pHandle->pkt->size);
-			if (pHandle->ac->codec_id == AV_CODEC_ID_AAC &&((AV_RB16(pHandle->pkt->data) & 0xfff0) != 0xfff0)){
+			if (0&&pHandle->ac->codec_id == AV_CODEC_ID_AAC &&((AV_RB16(pHandle->pkt->data) & 0xfff0) != 0xfff0)){
 				pHandle->pkt->stream_index = pHandle->ast->index;
 				av_write_frame(pHandle->oc,pHandle->pkt);
 				pHandle->pkt->stream_index = pHandle->audio_stream;
@@ -625,4 +626,25 @@ koala_handle * koala_get_demux_handle(){
 		return NULL;
 	init_handle(pHandle);
 	return pHandle;
+}
+
+// TODO: move to another file
+
+int koala_sinff(const char *short_name,unsigned char *buf,int buf_size){
+	AVInputFormat  * fmt;
+	AVProbeData pd = {"", NULL, 0 };
+	int score = 0;
+	pd.buf_size = buf_size;
+	pd.buf = buf;
+	av_register_all();
+	fmt = av_find_input_format(short_name);
+	if (fmt == NULL){
+		printf("%s:%d\n",__func__,__LINE__);
+		return score;
+	}
+	if (fmt->read_probe){
+		score = fmt->read_probe(&pd);
+		printf("%s:%d score is %d\n",__func__,__LINE__,score);
+	}
+	return score;
 }
