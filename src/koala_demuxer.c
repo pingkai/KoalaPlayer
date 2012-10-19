@@ -86,6 +86,8 @@ typedef struct koala_handle_t{
 	int64_t (*seek)(void *opaque, int64_t offset, int whence);
 	void *opaque;
 	void (*log_callback)(void*, int, const char*, va_list);
+
+	int wrape_aac2adts;
 	
 	
 }koala_handle;
@@ -231,11 +233,12 @@ void close_demux(koala_handle *pHandle){
 		av_free(pHandle->audio_input_buffer);
 		pHandle->audio_input_buffer = NULL;
 	}
-	av_free(pHandle);
 	if (pHandle->video_stream_list)
 		free(pHandle->video_stream_list);
 	if (pHandle->audio_stream_list)
 		free(pHandle->audio_stream_list);
+
+	av_free(pHandle);
 
 }
  
@@ -262,6 +265,14 @@ static enum KoalaCodecID avcodec2Koalacodec(enum AVCodecID codec_id){
 	}
 	return  KOALA_CODEC_ID_NONE;
 }
+static int get_aac_profile( AVCodecContext *codec){
+	int object_type;
+	object_type = codec->extradata[0] >>3 &0x1f;
+	codec->profile = object_type;
+	printf("object_type is %d\n",object_type);
+	return 0;
+}
+
 int get_stream_meta_by_index(koala_handle *pHandle,int index,stream_meta* meta){
 	
 	AVStream *pStream = pHandle->ctx->streams[index];
@@ -283,10 +294,11 @@ int get_stream_meta_by_index(koala_handle *pHandle,int index,stream_meta* meta){
 		
 	}else if (codec_type == AVMEDIA_TYPE_AUDIO){
 		meta->type = STREAM_TYPE_AUDIO;
+		if (pStream->codec->codec_id == AV_CODEC_ID_AAC)
+			get_aac_profile(pStream->codec);
 		meta->channels = pStream->codec->channels;
 		meta->samplerate = pStream->codec->sample_rate;
 		meta->profile = pStream->codec->profile;
-		printf("meta->profile is %d\n",meta->profile);
 	}else{
 		meta->type = STREAM_TYPE_UNKNOWN;
 	}
@@ -346,7 +358,8 @@ int open_audio(koala_handle *pHandle,int index){
 	pHandle->ac = pHandle->ctx->streams[pHandle->audio_stream]->codec;
  
 	// TODO: when switch audio please close it, if not aac or not need the filter
-	if (0&&pHandle->ac->codec_id == AV_CODEC_ID_AAC){
+	if (pHandle->wrape_aac2adts
+		&&pHandle->ac->codec_id == AV_CODEC_ID_AAC){
 	    pHandle->oc = avformat_alloc_context();
 	    if (!pHandle->oc) {
 	        fprintf(stderr, "Memory error\n");
@@ -457,8 +470,8 @@ int demux_seek(koala_handle *pHandle,int64_t timems,int stream_id){
 		timestamp = timestamp/1000;
 	}
 	printf("%s:%d timestamp is %lld stream_id is %d\n",__func__,__LINE__,timestamp,stream_id);
-	ret = avformat_seek_file(pHandle->ctx, stream_id, INT64_MIN, timestamp, timestamp, 0);
-	//	ret = avformat_seek_file(pHandle->ctx, stream_id, timestamp, timestamp, INT64_MAX, 0);
+	//ret = avformat_seek_file(pHandle->ctx, stream_id, INT64_MIN, timestamp, timestamp, 0);
+	ret = avformat_seek_file(pHandle->ctx, stream_id, timestamp, timestamp, INT64_MAX, 0);
 	return ret;
 
 }
@@ -583,7 +596,9 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 		}
 		else if (pHandle->pkt->stream_index == pHandle->audio_stream){
 		//	printf("audio pHandle->pkt->size is %d\n",pHandle->pkt->size);
-			if (0&&pHandle->ac->codec_id == AV_CODEC_ID_AAC &&((AV_RB16(pHandle->pkt->data) & 0xfff0) != 0xfff0)){
+			if (pHandle->ac->codec_id == AV_CODEC_ID_AAC 
+				&&((AV_RB16(pHandle->pkt->data) & 0xfff0) != 0xfff0)
+				&& pHandle->wrape_aac2adts){
 				pHandle->pkt->stream_index = pHandle->ast->index;
 				av_write_frame(pHandle->oc,pHandle->pkt);
 				pHandle->pkt->stream_index = pHandle->audio_stream;
@@ -615,10 +630,20 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 	return 0;
 }
 
+int  koala_set_aac_wrape_type(koala_handle *pHandle,int adts){
+	if (pHandle->audio_stream >= 0){
+		printf("%s Please call me before open audio stream\n",__func__);
+		return pHandle->wrape_aac2adts;
+	}
+	pHandle->wrape_aac2adts = adts;
+	return adts;
+}
+
 static void init_handle(koala_handle *pHandle){
 	memset(pHandle,0,sizeof(koala_handle));
 	pHandle->audio_stream = -1;
 	pHandle->video_stream = -1;
+	pHandle->wrape_aac2adts = 1;
 }
 koala_handle * koala_get_demux_handle(){
 	koala_handle *pHandle = av_malloc(sizeof(koala_handle));
