@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2012 pingkai010@gmail.com
+ *
+ *
+ */
 
 #include <limits.h>
 #include <fcntl.h>

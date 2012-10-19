@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2012 pingkai010@gmail.com
+ *
+ *
+ */
 #ifndef KOALA_TYPE_H
 #define KOALA_TYPE_H
 typedef enum {

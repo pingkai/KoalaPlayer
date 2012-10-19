@@ -1,22 +1,9 @@
 /*
- * Copyright (c) 2005 Francois Revol
+ * Copyright (c) 2012 pingkai010@gmail.com
  *
- * This file is part of Libav.
  *
- * Libav is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- *
- * Libav is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with Libav; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
+
 //#define ANDROID
 #ifdef ANDROID
 #define LOG_TAG "koala_demuxer"
@@ -112,14 +99,17 @@ static int probe_buf_write(void *opaque, uint8_t *buf, int buf_size)
 
 void regist_input_file_func(koala_handle *pHandle,void *opaque,int (*read_packet)(void *opaque, uint8_t *buf, int buf_size),
 								int64_t (*seek)(void *opaque, int64_t offset, int whence)){
-	pHandle->read_packet = read_packet;
-	pHandle->seek = seek;
-	pHandle->opaque = opaque;
+	if (pHandle){
+		pHandle->read_packet = read_packet;
+		pHandle->seek = seek;
+		pHandle->opaque = opaque;
+	}
 	return;								
 }
 
 void regist_log_call_back(koala_handle *pHandle,void (*callback)(void*, int, const char*, va_list)){
-	pHandle->log_callback = callback;
+	if (pHandle)
+		pHandle->log_callback = callback;
 	return;
 }
 static int fill_stream_table(koala_handle *pHandle){
@@ -146,7 +136,8 @@ static int interrupt_cb(void *opaque){
     	return 0;
 }
 void interrupt_demuxer(koala_handle *pHandle){
-	pHandle->interruptIO = 1;
+	if (pHandle)
+		pHandle->interruptIO = 1;
 	return;
 }
 
@@ -156,6 +147,8 @@ int init_open(koala_handle *pHandle,const char *filename){
 	int ret;
 	AVInputFormat *in_fmt = NULL;
 	int use_filename = 0;
+	if (pHandle == NULL)
+		return -1;
 	pHandle->read_buffer = av_malloc(INITIAL_BUFFER_SIZE);
 	if (pHandle->read_packet == NULL ){
 		printf("%s:%d no read func\n",__FILE__,__LINE__);
@@ -217,6 +210,9 @@ fail:
 	
 }
 void close_demux(koala_handle *pHandle){
+	if (pHandle == NULL)
+		return;
+
 	if (pHandle->oc){
 		avio_flush(pHandle->oc->pb);
 		avformat_free_context(pHandle->oc);
@@ -243,6 +239,8 @@ void close_demux(koala_handle *pHandle){
 }
  
 int get_nb_stream(koala_handle *pHandle,int *pNbAudio, int *pNbVideo){
+	if (pHandle == NULL)
+		return -1;
 
 	if (pNbAudio)
 		*pNbAudio = pHandle->nb_audio_stream;
@@ -275,7 +273,14 @@ static int get_aac_profile( AVCodecContext *codec){
 
 int get_stream_meta_by_index(koala_handle *pHandle,int index,stream_meta* meta){
 	
-	AVStream *pStream = pHandle->ctx->streams[index];
+	AVStream *pStream;
+	if (pHandle == NULL || meta == NULL)
+		return -1;
+	if (index > pHandle->ctx->nb_streams){
+		printf("%s:%d no such stream\n",__FILE__,__LINE__);
+		return -1;
+	}
+	pStream	= pHandle->ctx->streams[index];
 	enum AVMediaType codec_type = pStream->codec->codec_type;
 //	pStream->codec->codec_id
 	printf("%s:%d pStream->codec->codec_id is %d\n",__FILE__,__LINE__,pStream->codec->codec_id);
@@ -321,6 +326,8 @@ static int stream_index2av_index(koala_handle *pHandle,enum AVMediaType type,int
 
 int open_stream(koala_handle *pHandle,int index){
 	int av_index;
+	if (pHandle == NULL)
+		return -1;
 	enum AVMediaType codec_type = pHandle->ctx->streams[index]->codec->codec_type;
 
 	if (index >pHandle->ctx->nb_streams){
@@ -347,6 +354,9 @@ int open_stream(koala_handle *pHandle,int index){
 }
 int open_audio(koala_handle *pHandle,int index){ 
 	int err;
+	if (pHandle == NULL)
+		return -1;
+
 	printf("%s\n",__func__);
 	if (index >= pHandle->nb_audio_stream || index < 0){
 		printf("%s:%d No such audio\n",__FILE__,__LINE__);
@@ -396,12 +406,16 @@ int open_audio(koala_handle *pHandle,int index){
 	return pHandle->audio_stream;
 }
 int set_demuxer_mode(koala_handle *pHandle,demux_mode_e mode){
+	if (pHandle == NULL)
+		return -1;
 	pHandle->demux_mode = mode;
 	return mode;
 }
 int open_video(koala_handle *pHandle,int index){
 //	int i ;
 	printf("%s\n",__func__);
+	if (pHandle == NULL)
+		return -1;
 
 	if (index >= pHandle->nb_video_stream || index < 0){
 		printf("%s:%d No such video\n",__FILE__,__LINE__);
@@ -450,6 +464,9 @@ int open_video(koala_handle *pHandle,int index){
 int demux_seek(koala_handle *pHandle,int64_t timems,int stream_id){
 	int ret;
 	int64_t timestamp;
+	if (pHandle == NULL)
+		return -1;
+
 	if (pHandle->pkt_cache_buf){
 			free(pHandle->pkt_cache_buf);
 			pHandle->pkt_cache_buf = NULL;
@@ -481,7 +498,7 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 	uint8_t startcode[4] = {0,0,0,1};
 	int in_buf_ptr = 0;
 
-	if (pBuffer == NULL){
+	if (pHandle == NULL ||pBuffer == NULL||pSize == NULL){
 		printf("%s:%d\n",__FILE__,__LINE__);
 		return -1;
 	}
@@ -503,8 +520,10 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 			memcpy(pBuffer,pHandle->pkt_cache_buf + pHandle->pkt_cache_buf_ptr,*pSize);
 			pHandle->pkt_cache_buf_ptr += *pSize;
 		}
-		*pPts = -1;
-		*pStream = pHandle->pkt_cache_buf_stream_index;
+		if (pPts)
+			*pPts = -1;
+		if (pStream)
+			*pStream = pHandle->pkt_cache_buf_stream_index;
 		return 0;
 	}
 
@@ -524,9 +543,12 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 				int ret;
 				ret = av_write_frame(pHandle->oc,NULL);
 				if (ret == 0){
-					*pPts = -1;
-					*pStream = pHandle->audio_stream;
-					*pFlag = 1;
+					if (pPts)
+						*pPts = -1;
+					if (pStream)
+						*pStream = pHandle->audio_stream;
+					if (pFlag)
+						*pFlag = 1;
 					return 0;
 				}
 			}
@@ -538,9 +560,12 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 				)
 				continue;
 		}
-		*pStream = pHandle->pkt->stream_index;
-		pHandle->pkt_cache_buf_stream_index = *pStream;
-		*pFlag = pHandle->pkt->flags &AV_PKT_FLAG_KEY;
+		if (pStream){
+			*pStream = pHandle->pkt->stream_index;
+			pHandle->pkt_cache_buf_stream_index = *pStream;
+		}
+		if (pFlag)
+			*pFlag = pHandle->pkt->flags &AV_PKT_FLAG_KEY;
 
 		if (pHandle->pkt->stream_index == pHandle->video_stream){
 			if (pHandle->pkt->flags &AV_PKT_FLAG_KEY)
@@ -548,7 +573,8 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 			else
 				keyframe = 0;
 			pHandle->pkt->pts = pHandle->pkt->pts*1000 /pHandle->v_time_base;//ms
-			*pPts = pHandle->pkt->pts;
+			if (pPts)
+				*pPts = pHandle->pkt->pts;
 		//	printf("video pHandle->pkt->size is %d\n",pHandle->pkt->size);
 			if (*pSize < (pHandle->vc->extradata_size + pHandle->pkt->size)){
 
@@ -621,7 +647,8 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 					*pSize = in_buf_ptr;
 				}
 			}
-			*pPts = pHandle->pkt->pts*1000/pHandle->a_time_base;
+			if (pPts)
+				*pPts = pHandle->pkt->pts*1000/pHandle->a_time_base;
 			break;
 		}else
 			av_free_packet(pHandle->pkt);
@@ -631,6 +658,8 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 }
 
 int  koala_set_aac_wrape_type(koala_handle *pHandle,int adts){
+	if (pHandle == NULL)
+		return -1;
 	if (pHandle->audio_stream >= 0){
 		printf("%s Please call me before open audio stream\n",__func__);
 		return pHandle->wrape_aac2adts;
@@ -659,6 +688,8 @@ int koala_sinff(const char *short_name,unsigned char *buf,int buf_size){
 	AVInputFormat  * fmt;
 	AVProbeData pd = {"", NULL, 0 };
 	int score = 0;
+	if (buf == NULL || buf_size <= 0)
+		return score;
 	pd.buf_size = buf_size;
 	pd.buf = buf;
 	av_register_all();
@@ -673,3 +704,5 @@ int koala_sinff(const char *short_name,unsigned char *buf,int buf_size){
 	}
 	return score;
 }
+
+

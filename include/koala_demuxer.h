@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2012 pingkai010@gmail.com
+ *
+ *
+ */
 
 #ifndef KOALA_DEMUXER_H
 #define KOALA_DEMUXER_H
@@ -8,7 +13,6 @@ extern "C"
 #include "koala_type.h"
 typedef struct koala_handle_t koala_handle;
 koala_handle * koala_get_demux_handle();
-// TODO: get aac profile
 
 void regist_input_file_func(koala_handle *pHandle,void *opaque,int (*read_packet)(void *opaque, uint8_t *buf, int buf_size),
 								int64_t (*seek)(void *opaque, int64_t offset, int whence));
