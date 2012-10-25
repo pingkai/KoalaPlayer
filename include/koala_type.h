@@ -24,6 +24,7 @@ enum KoalaCodecID{
 	
 	KOALA_CODEC_ID_AAC,
 	KOALA_CODEC_ID_MP3,
+	KOALA_CODEC_ID_APE,
 };
 
 

@@ -261,6 +261,8 @@ static enum KoalaCodecID avcodec2Koalacodec(enum AVCodecID codec_id){
 			return KOALA_CODEC_ID_AAC;
 		case AV_CODEC_ID_MP3:
 			return KOALA_CODEC_ID_MP3;
+		case AV_CODEC_ID_APE:
+			return KOALA_CODEC_ID_APE;
 		default:
 			break;
 	}
