@@ -258,6 +258,8 @@ static enum KoalaCodecID avcodec2Koalacodec(enum AVCodecID codec_id){
 			return KOALA_CODEC_ID_AAC;
 		case AV_CODEC_ID_MP3:
 			return KOALA_CODEC_ID_MP3;
+		case AV_CODEC_ID_APE:
+			return KOALA_CODEC_ID_APE;
 		default:
 			break;
 	}
@@ -539,7 +541,7 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
             char errbuf[50];
             av_strerror(err, errbuf, sizeof(errbuf));
 			printf("%s:%d: %s\n",__FILE__,__LINE__,errbuf);
-			if (err == AVERROR_EOF &&(pHandle->oc->oformat != NULL )){
+			if (err == AVERROR_EOF &&(pHandle->oc != NULL )){
 				int ret;
 				ret = av_write_frame(pHandle->oc,NULL);
 				if (ret == 0){
