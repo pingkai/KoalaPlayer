@@ -36,7 +36,7 @@ static int read_data(void *opaque, uint8_t *buf, int buf_size){
 	ret = read(fd,buf,buf_size);
 	return ret;
 }
-
+#define AVSEEK_SIZE 0x10000
 static int64_t seek(void *opaque, int64_t offset, int whence){
 	int ret;
 	int fd = *(int *)opaque;
@@ -95,10 +95,10 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	if (strncmp(argv[1],"http://",7) == 0 
-		||strncmp(argv[1],"rtsp://",7) == 0
-		|| strncmp(argv[1],"mms://",6) == 0
-		)
+//	if (strncmp(argv[1],"http://",7) == 0 
+//		||strncmp(argv[1],"rtsp://",7) == 0
+//		|| strncmp(argv[1],"mms://",6) == 0
+//		)
 		main_content.open_with_koala = 1;
 	unlink("audio.aac");
 	unlink("video.h264");
@@ -124,7 +124,7 @@ int main(int argc, char **argv)
 	if (NbAudio > 0)
 		a_index = open_audio(pHandle,0);
 	if (NbVideo > 0){
-		mode = set_demuxer_mode(pHandle,DEMUX_MODE_I_FRAME);
+	//	mode = set_demuxer_mode(pHandle,DEMUX_MODE_I_FRAME);
 		v_index = open_video(pHandle,0);
 	}
 	while(!main_content.quite){
@@ -138,9 +138,9 @@ int main(int argc, char **argv)
 		}
 		if (stream_index == v_index){
 #if (__WORDSIZE == 64)
-	//		printf("V size is %d,pts is %ld\n",size,pts);
+			printf("V size is %d,pts is %ld\n",size,pts);
 #else
-	//		printf("V size is %d,pts is %lld\n",size,pts);
+			printf("V size is %d,pts is %lld\n",size,pts);
 #endif
 			if (mode == DEMUX_MODE_I_FRAME)
 				mode = set_demuxer_mode(pHandle,DEMUX_MODE_NORMOL);
@@ -148,9 +148,9 @@ int main(int argc, char **argv)
 		}
 		else if (stream_index == a_index){
 #if (__WORDSIZE == 64)
-		//	printf("A size is %d,pts is %ld\n",size,pts);
+//			printf("A size is %d,pts is %ld\n",size,pts);
 #else
-		//	printf("A size is %d,pts is %lld\n",size,pts);
+//			printf("A size is %d,pts is %lld\n",size,pts);
 #endif
 			write(afd,pkt_buf,size);
 
