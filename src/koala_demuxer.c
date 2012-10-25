@@ -30,8 +30,6 @@
 
 #define PKT_CACHE_BUF_SIZE 1024*1024*5
 
-
-
 typedef struct koala_handle_t{
 	AVIOContext *in_put_pb;
 	int  interruptIO;
@@ -64,7 +62,6 @@ typedef struct koala_handle_t{
 	int a_time_base;
 	int v_time_base;
 	int write_h264_sps_pps;
-	int write_h264_startcode;
 	int mp4_vol;//mpeg4 video header
 	uint8_t *pPkt_buf; //for audio muxer callback
 	int *pPkt_buf_size;//for audio muxer callback
@@ -79,6 +76,9 @@ typedef struct koala_handle_t{
 	
 	
 }koala_handle;
+int open_audio(koala_handle *pHandle,int index);
+
+int open_video(koala_handle *pHandle,int index);
 
 static int probe_buf_write(void *opaque, uint8_t *buf, int buf_size)
 {
@@ -114,7 +114,7 @@ void regist_log_call_back(koala_handle *pHandle,void (*callback)(void*, int, con
 	return;
 }
 static int fill_stream_table(koala_handle *pHandle){
-	int i;
+	unsigned int i;
 	for(i = 0;i<pHandle->ctx->nb_streams;i++){
 		if (pHandle->ctx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO){
 			pHandle->video_stream_list[pHandle->nb_video_stream++] = i; 
@@ -281,7 +281,7 @@ int get_stream_meta_by_index(koala_handle *pHandle,int index,stream_meta* meta){
 	AVStream *pStream;
 	if (pHandle == NULL || meta == NULL)
 		return -1;
-	if (index > pHandle->ctx->nb_streams){
+	if (index > (int) pHandle->ctx->nb_streams){
 		printf("%s:%d no such stream\n",__FILE__,__LINE__);
 		return -1;
 	}
@@ -335,7 +335,7 @@ int open_stream(koala_handle *pHandle,int index){
 		return -1;
 	enum AVMediaType codec_type = pHandle->ctx->streams[index]->codec->codec_type;
 
-	if (index >pHandle->ctx->nb_streams){
+	if (index > (int)pHandle->ctx->nb_streams){
 		printf("No such stream");
 		return -1;
 	}
@@ -434,33 +434,16 @@ int open_video(koala_handle *pHandle,int index){
 	&& pHandle->vc->extradata != NULL 
 	&&(pHandle->vc->extradata[0] == 1)
 	){
-	    uint8_t *dummy_p;
-	    int dummy_int;
-		int i;
 		pHandle->avcbsfc = av_bitstream_filter_init("h264_mp4toannexb");
 		if (!pHandle->avcbsfc) {
 			av_log(NULL, AV_LOG_ERROR, "Cannot open the h264_mp4toannexb BSF!\n");
 			return -1;
 		}
-	//	for(i = 0; i< pHandle->vc->extradata_size;i++)
-	//		printf("%02x ",pHandle->vc->extradata[i]);
-	//	printf("\n");
-	//	av_bitstream_filter_filter(bsfc, pHandle->vc, NULL, &dummy_p, &dummy_int, NULL, 0, 0);
-	//	if (err < 0)
-	//		printf("av_bitstream_filter_filter error\n");
-	//	for(i = 0; i< pHandle->vc->extradata_size;i++)
-	//		printf("%02x ",pHandle->vc->extradata[i]);
-	//	printf("\n");
-
-	//    av_bitstream_filter_close(bsfc);
 		pHandle->write_h264_sps_pps = 1;
-		pHandle->write_h264_startcode =1;
 	}else 
 	if (pHandle->vc->codec_id == AV_CODEC_ID_MPEG4){
 		pHandle->mp4_vol = 1;
 	}
-//	if (err < 0)
-//		return -1;
 	return pHandle->video_stream;
 }
 
@@ -489,7 +472,7 @@ int demux_seek(koala_handle *pHandle,int64_t timems,int stream_id){
 	}
 	else{
 		stream_id = -1;
-		timestamp = timestamp/1000;
+		timestamp = timems/1000;
 	}
 	printf("%s:%d timestamp is %lld stream_id is %d\n",__func__,__LINE__,timestamp,stream_id);
 	//ret = avformat_seek_file(pHandle->ctx, stream_id, INT64_MIN, timestamp, timestamp, 0);
@@ -598,47 +581,28 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 				in_buf_ptr += pHandle->vc->extradata_size;
 			}else
 
-			if (pHandle->write_h264_sps_pps/* && keyframe*/){
-				if (1){
-			        AVPacket new_pkt = *pHandle->pkt;
-				//	AVBitStreamFilterContext *bsfc= av_bitstream_filter_init("h264_mp4toannexb");
-			        int a = av_bitstream_filter_filter(pHandle->avcbsfc, pHandle->vc, NULL,
-			                                           &new_pkt.data, &new_pkt.size,
-			                                           pHandle->pkt->data, pHandle->pkt->size,
-			                                           pHandle->pkt->flags & AV_PKT_FLAG_KEY);
-			        if (a > 0) {
-			            av_free_packet(pHandle->pkt);
-			            new_pkt.destruct = av_destruct_packet;
-			        } else if (a < 0) {
-			            av_log(NULL, AV_LOG_ERROR, "%s failed for stream %d, codec %s",
-			                   pHandle->avcbsfc->filter->name, pHandle->pkt->stream_index,
-			                   pHandle->vc->codec ? pHandle->vc->codec->name : "copy");
-			          //  print_error("", a);
-			        }
-			        *pHandle->pkt = new_pkt;
-					memcpy(pHandle->pPkt_buf + (in_buf_ptr),pHandle->pkt->data,pHandle->pkt->size);
-					in_buf_ptr += pHandle->pkt->size;
+			if (pHandle->write_h264_sps_pps /*&& keyframe*/){
+		        AVPacket new_pkt = *pHandle->pkt;
+		        int a = av_bitstream_filter_filter(pHandle->avcbsfc, pHandle->vc, NULL,
+		                                           &new_pkt.data, &new_pkt.size,
+		                                           pHandle->pkt->data, pHandle->pkt->size,
+		                                           pHandle->pkt->flags & AV_PKT_FLAG_KEY);
+		        if (a > 0) {
+		            av_free_packet(pHandle->pkt);
+		            new_pkt.destruct = av_destruct_packet;
+		        } else if (a < 0) {
+		            av_log(NULL, AV_LOG_ERROR, "%s failed for stream %d, codec %s",
+		                   pHandle->avcbsfc->filter->name, pHandle->pkt->stream_index,
+		                   pHandle->vc->codec ? pHandle->vc->codec->name : "copy");
+		        }
+		        *pHandle->pkt = new_pkt;
+				memcpy(pHandle->pPkt_buf + (in_buf_ptr),pHandle->pkt->data,pHandle->pkt->size);
+				in_buf_ptr += pHandle->pkt->size;
 					
-			    }
-				else
-			    {
-					memcpy(pHandle->pPkt_buf + (in_buf_ptr),pHandle->vc->extradata ,pHandle->vc->extradata_size);
-					in_buf_ptr += pHandle->vc->extradata_size;
-					memcpy(pHandle->pPkt_buf + (in_buf_ptr),startcode,4);
-					in_buf_ptr +=4;
-					memcpy(pHandle->pPkt_buf + (in_buf_ptr),pHandle->pkt->data+4,pHandle->pkt->size-4);
-					in_buf_ptr += (pHandle->pkt->size-4);
-			    }
-			}else{
-				if (pHandle->write_h264_startcode){
-					memcpy(pHandle->pPkt_buf + (in_buf_ptr),startcode,4);
-					in_buf_ptr += 4;			
-					memcpy(pHandle->pPkt_buf + (in_buf_ptr),pHandle->pkt->data+4,pHandle->pkt->size-4);
-					in_buf_ptr += (pHandle->pkt->size-4);				
-				}else{
-					memcpy(pHandle->pPkt_buf + in_buf_ptr,pHandle->pkt->data,pHandle->pkt->size);
-					in_buf_ptr += pHandle->pkt->size;
-				}
+			}
+			else{
+				memcpy(pHandle->pPkt_buf + in_buf_ptr,pHandle->pkt->data,pHandle->pkt->size);
+				in_buf_ptr += pHandle->pkt->size;
 			}
 
 			if (pHandle->pPkt_buf == pHandle->pkt_cache_buf){
