@@ -20,6 +20,7 @@ enum KoalaCodecID{
 	KOALA_CODEC_ID_NONE,
 	
 	KOALA_CODEC_ID_H264,
+	KOALA_CODEC_ID_MPEG4,
 
 	
 	KOALA_CODEC_ID_AAC,
@@ -33,6 +34,7 @@ typedef struct {
 	int64_t duration;//ms
 	enum KoalaCodecID codec;
 	int index;
+	int nb_index_entries;
 
 
 	// TODO:  use union

@@ -263,6 +263,8 @@ static enum KoalaCodecID avcodec2Koalacodec(enum AVCodecID codec_id){
 			return KOALA_CODEC_ID_MP3;
 		case AV_CODEC_ID_APE:
 			return KOALA_CODEC_ID_APE;
+		case AV_CODEC_ID_MPEG4:
+			return KOALA_CODEC_ID_MPEG4;
 		default:
 			break;
 	}
@@ -301,7 +303,7 @@ int get_stream_meta_by_index(koala_handle *pHandle,int index,stream_meta* meta){
 		meta->type = STREAM_TYPE_VIDEO;
 		meta->width = pStream->codec->width;
 		meta->height = pStream->codec->height;
-		
+
 	}else if (codec_type == AVMEDIA_TYPE_AUDIO){
 		meta->type = STREAM_TYPE_AUDIO;
 		if (pStream->codec->codec_id == AV_CODEC_ID_AAC)
@@ -312,6 +314,7 @@ int get_stream_meta_by_index(koala_handle *pHandle,int index,stream_meta* meta){
 	}else{
 		meta->type = STREAM_TYPE_UNKNOWN;
 	}
+	meta->nb_index_entries = pStream->nb_index_entries;
 	return 0;
 }
 
@@ -594,11 +597,15 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 		            av_log(NULL, AV_LOG_ERROR, "%s failed for stream %d, codec %s",
 		                   pHandle->avcbsfc->filter->name, pHandle->pkt->stream_index,
 		                   pHandle->vc->codec ? pHandle->vc->codec->name : "copy");
+					av_free_packet(pHandle->pkt);
+					new_pkt.destruct = av_destruct_packet;
+					av_free_packet(&new_pkt);
+					return -1;
 		        }
 		        *pHandle->pkt = new_pkt;
 				memcpy(pHandle->pPkt_buf + (in_buf_ptr),pHandle->pkt->data,pHandle->pkt->size);
 				in_buf_ptr += pHandle->pkt->size;
-					
+
 			}
 			else{
 				memcpy(pHandle->pPkt_buf + in_buf_ptr,pHandle->pkt->data,pHandle->pkt->size);
