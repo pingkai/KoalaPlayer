@@ -8,7 +8,7 @@
 #ifdef ANDROID
 #define LOG_TAG "koala_demuxer"
 #include <utils/Log.h>
-#define printf ALOGI
+#define printf ALOGE
 #endif
 #include <limits.h>
 #include <fcntl.h>
@@ -51,6 +51,7 @@ typedef struct koala_handle_t{
 	int  pkt_cache_buf_ptr;
 	int  pkt_cache_buf_size;
 	int pkt_cache_buf_stream_index;
+	int64_t lastpts;
 
 	
 	AVFormatContext *oc; //raw audio data to es use it
@@ -478,8 +479,8 @@ int demux_seek(koala_handle *pHandle,int64_t timems,int stream_id){
 		timestamp = timems/1000;
 	}
 	printf("%s:%d timestamp is %lld stream_id is %d\n",__func__,__LINE__,timestamp,stream_id);
-	//ret = avformat_seek_file(pHandle->ctx, stream_id, INT64_MIN, timestamp, timestamp, 0);
-	ret = avformat_seek_file(pHandle->ctx, stream_id, timestamp, timestamp, INT64_MAX, 0);
+	ret = avformat_seek_file(pHandle->ctx, stream_id, INT64_MIN, timestamp, timestamp, 0);
+//	ret = avformat_seek_file(pHandle->ctx, stream_id, timestamp, timestamp, INT64_MAX, 0);
 	return ret;
 
 }
@@ -512,7 +513,7 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 			pHandle->pkt_cache_buf_ptr += *pSize;
 		}
 		if (pPts)
-			*pPts = -1;
+			*pPts = pHandle->lastpts;//-1;
 		if (pStream)
 			*pStream = pHandle->pkt_cache_buf_stream_index;
 		return 0;
@@ -566,7 +567,8 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 			pHandle->pkt->pts = pHandle->pkt->pts*1000 /pHandle->v_time_base;//ms
 			if (pPts)
 				*pPts = pHandle->pkt->pts;
-			printf("video pHandle->pkt->size is %d\n",pHandle->pkt->size);
+				pHandle->lastpts = pHandle->pkt->pts;
+		//	printf("video pHandle->pkt->size is %d\n",pHandle->pkt->size);
 			if (*pSize < (pHandle->vc->extradata_size + pHandle->pkt->size)){
 
 				// TODO:  size = pHandle->vc->extradata_size + pHandle->pkt->size -*pSize
@@ -649,6 +651,7 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 			}
 			if (pPts)
 				*pPts = pHandle->pkt->pts*1000/pHandle->a_time_base;
+			pHandle->lastpts = *pPts;
 			break;
 		}else
 			av_free_packet(pHandle->pkt);
