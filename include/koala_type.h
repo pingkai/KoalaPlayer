@@ -42,10 +42,14 @@ typedef struct {
 	int channels;
 	int samplerate;
 	int profile;
+    int bits_per_coded_sample;
 
 	//video only
 	int width;
 	int height;
 	
 }stream_meta;
+
+typedef int  (*decoder_buf_callback) (unsigned char *buffer, int size,long long pts,void *CbpHandle);
+
 #endif

@@ -279,6 +279,34 @@ static int get_aac_profile( AVCodecContext *codec){
 	return 0;
 }
 
+void *koala_get_codec_data(koala_handle *pHandle,int index){
+	AVStream *pStream;
+	if (pHandle == NULL)
+		return NULL;
+	if (index > (int) pHandle->ctx->nb_streams){
+		printf("%s:%d no such stream\n",__FILE__,__LINE__);
+		return NULL;
+	}
+	pStream	= pHandle->ctx->streams[index];
+    return (void *)pStream->codec;
+
+    
+}
+int get_stream_codec_extra_data(koala_handle *pHandle,int index,uint8_t *extradata){
+	AVStream *pStream;
+	if (pHandle == NULL)
+		return -1;
+	if (index > (int) pHandle->ctx->nb_streams){
+		printf("%s:%d no such stream\n",__FILE__,__LINE__);
+		return -1;
+	}
+	pStream	= pHandle->ctx->streams[index];
+
+    extradata = pStream->codec->extradata;
+    return pStream->codec->extradata_size;
+
+    
+}
 int get_stream_meta_by_index(koala_handle *pHandle,int index,stream_meta* meta){
 	
 	AVStream *pStream;
@@ -312,6 +340,7 @@ int get_stream_meta_by_index(koala_handle *pHandle,int index,stream_meta* meta){
 		meta->channels = pStream->codec->channels;
 		meta->samplerate = pStream->codec->sample_rate;
 		meta->profile = pStream->codec->profile;
+        meta->bits_per_coded_sample = pStream->codec->bits_per_coded_sample;
 	}else{
 		meta->type = STREAM_TYPE_UNKNOWN;
 	}

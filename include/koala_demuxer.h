@@ -19,6 +19,9 @@ void regist_input_file_func(koala_handle *pHandle,void *opaque,int (*read_packet
 void regist_log_call_back(koala_handle *pHandle,void (*callback)(void*, int, const char*, va_list));
 
 int init_open(koala_handle *pHandle,const char *filename);
+
+int get_stream_codec_extra_data(koala_handle *pHandle,int index,uint8_t *extradata);
+
 int get_nb_stream(koala_handle *pHandle,int *pNbAudio, int *pNbVideo);
 int  koala_set_aac_wrape_type(koala_handle *pHandle,int adts);
 
