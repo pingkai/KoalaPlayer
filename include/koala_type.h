@@ -27,6 +27,10 @@ enum KoalaCodecID{
 	KOALA_CODEC_ID_MP3,
 	KOALA_CODEC_ID_APE,
 };
+typedef struct{
+    int nChannles;
+    int sample_rate;
+}audio_info;
 
 
 typedef struct {
@@ -35,6 +39,8 @@ typedef struct {
 	enum KoalaCodecID codec;
 	int index;
 	int nb_index_entries;
+    void * koala_codec_context;
+    int koala_codec_context_size;
 
 
 	// TODO:  use union
@@ -49,6 +55,8 @@ typedef struct {
 	int height;
 	
 }stream_meta;
+
+#define MAX_AUDIO_FRAME_SIZE 192000
 
 typedef int  (*decoder_buf_callback) (unsigned char *buffer, int size,long long pts,void *CbpHandle);
 

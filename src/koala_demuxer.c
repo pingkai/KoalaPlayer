@@ -327,6 +327,8 @@ int get_stream_meta_by_index(koala_handle *pHandle,int index,stream_meta* meta){
 //		meta->duration = pStream->duration*(pStream->time_base.num/pStream->time_base.den);
 //	}
 	meta->codec = avcodec2Koalacodec(pStream->codec->codec_id);
+    meta->koala_codec_context = pStream->codec;
+    meta->koala_codec_context_size = sizeof(AVCodecContext);
 	meta->index = index;
 	if (codec_type == AVMEDIA_TYPE_VIDEO){
 		meta->type = STREAM_TYPE_VIDEO;

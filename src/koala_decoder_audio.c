@@ -33,8 +33,6 @@ typedef struct koala_decoder_handle_t{
 	void * CbpHandle;
 }koala_decoder_handle;
 
-#define MAX_AUDIO_FRAME_SIZE 192000 
-
 int reg_audio_decoder_cb(koala_decoder_handle *pHandle,decoder_buf_callback cb,void *CbpHandle){
 	if (!pHandle || !cb){
 		printf("%s:%d error\n",__FILE__,__LINE__);
@@ -46,7 +44,7 @@ int reg_audio_decoder_cb(koala_decoder_handle *pHandle,decoder_buf_callback cb,v
 
 }
 
-int koala_ffmpeg_decode_audio_pkt(koala_decoder_handle* pHandle,uint8_t *data,int size){
+int koala_ffmpeg_decode_audio_pkt(koala_decoder_handle* pHandle,uint8_t *data,int size,long long pts){
 	int out_size, len;
 	int sendpts = 1;
 	int err;
@@ -56,6 +54,7 @@ int koala_ffmpeg_decode_audio_pkt(koala_decoder_handle* pHandle,uint8_t *data,in
 	}
 	pHandle->pkt->data = data;
 	pHandle->pkt->size = size;
+    pHandle->pkt->pts  = pts;
 	while (pHandle->pkt->size > 0) {
 		out_size = MAX_AUDIO_FRAME_SIZE;
 		len = avcodec_decode_audio3(pHandle->ac, pHandle->audioOutBuf, &out_size, pHandle->pkt);
@@ -79,9 +78,20 @@ int koala_ffmpeg_decode_audio_pkt(koala_decoder_handle* pHandle,uint8_t *data,in
 	}
 	pHandle->pkt->data = data;
 	av_free_packet(pHandle->pkt);
-	return 0;
+	return err;
 }
 
+int get_audio_info(void *codec_cont,audio_info *info){
+    AVCodecContext *codec = (AVCodecContext *)codec_cont;
+    if (codec_cont == NULL)
+        return -1;
+    
+    if (info){
+        info->nChannles   = codec->channels;
+        info->sample_rate = codec->sample_rate;
+    }
+    return 0;
+}
 koala_decoder_handle* init_decoder_audio(void *codec_cont){
 	koala_decoder_handle *pHandle = (koala_decoder_handle *)malloc(sizeof(koala_decoder_handle));
     AVCodecContext *codec = (AVCodecContext *)codec_cont;
@@ -107,7 +117,7 @@ koala_decoder_handle* init_decoder_audio(void *codec_cont){
     ret = avcodec_copy_context(pHandle->ac,codec);
     if (ret < 0)
         printf("avcodec_copy_context error\n");
-	if (avcodec_open(pHandle->ac, pHandle->audio_codec) < 0) {
+	if (avcodec_open2(pHandle->ac, pHandle->audio_codec,NULL) < 0) {
         printf("could not open codec\n");
     	av_free(pHandle->ac);
 		free(pHandle);
