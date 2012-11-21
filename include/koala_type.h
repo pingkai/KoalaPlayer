@@ -30,6 +30,8 @@ enum KoalaCodecID{
 typedef struct{
     int nChannles;
     int sample_rate;
+    int sample_fmt;
+    
 }audio_info;
 
 

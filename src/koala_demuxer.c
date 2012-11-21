@@ -263,6 +263,7 @@ static enum KoalaCodecID avcodec2Koalacodec(enum AVCodecID codec_id){
 		case AV_CODEC_ID_MP3:
 			return KOALA_CODEC_ID_MP3;
 		case AV_CODEC_ID_APE:
+		case AV_CODEC_ID_COOK:	
 			return KOALA_CODEC_ID_APE;
 		case AV_CODEC_ID_MPEG4:
 			return KOALA_CODEC_ID_MPEG4;

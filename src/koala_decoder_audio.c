@@ -89,6 +89,7 @@ int get_audio_info(void *codec_cont,audio_info *info){
     if (info){
         info->nChannles   = codec->channels;
         info->sample_rate = codec->sample_rate;
+        info->sample_fmt  = codec->sample_fmt;
     }
     return 0;
 }
@@ -163,4 +164,29 @@ void close_decoder_audio(koala_decoder_handle* pHandle){
 	
 }
 
+///////////////////////////////////////////////////////////
+ReSampleContext * koala_resample_audio_init(int input_rate,int input_channels,int sample_fmt_in,
+                                   int output_rate,int output_channels,int  sample_fmt_out){
+    
+    ReSampleContext *presampleContext = av_audio_resample_init(output_channels,
+                           input_channels,
+                           output_rate,
+                           input_rate,
+                           sample_fmt_out,
+                           sample_fmt_in,
+                           16,10,0,0.8f);
+    return presampleContext;
+}
+
+int koala_resample_audio(ReSampleContext * s,short * input,short * output,int nb_samples){
+    int ret;
+    ret = audio_resample(s,output,input,nb_samples);
+    return ret;
+   
+}
+
+int koala_resample_auido_close(ReSampleContext * s){
+     audio_resample_close(s);
+     return 0;
+}
 

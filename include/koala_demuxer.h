@@ -38,6 +38,8 @@ void close_demux(koala_handle *pHandle);
 void interrupt_demuxer(koala_handle *pHandle);
 int get_stream_meta_by_index(koala_handle *pHandle,int index,stream_meta* meta);
 int koala_sinff(const char * short_name,unsigned char *buf,int buf_size);
+void *koala_get_codec_data(koala_handle *pHandle,int index);
+
 
 
 #ifdef __cplusplus

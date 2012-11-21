@@ -3,8 +3,8 @@
  *
  *
  */
-#ifndef KOALA_DEMUXER_H
-#define KOALA_DEMUXER_H
+#ifndef KOALA_DEMUXER_AUDIO_H
+#define KOALA_DEMUXER_AUDIO_H
 #ifdef __cplusplus
 extern "C"
 {
@@ -23,6 +23,18 @@ int reg_audio_decoder_cb(koala_decoder_handle *pHandle,decoder_buf_callback cb,v
 int koala_ffmpeg_decode_audio_pkt(koala_decoder_handle* pHandle,uint8_t *data,int size,long long pts);
 
 int get_audio_info(void *codec_cont,audio_info *info);
+
+
+typedef struct ReSampleContext_t ReSampleContext;
+
+
+ReSampleContext * koala_resample_audio_init(int input_rate,int input_channels,int sample_fmt_in,
+                                   int output_rate,int output_channels,int sample_fmt_out);
+int koala_resample_audio(ReSampleContext * s,short * input,short * output,int nb_samples);
+
+int koala_resample_auido_close(ReSampleContext * s);
+
+
 
 
 #ifdef __cplusplus
