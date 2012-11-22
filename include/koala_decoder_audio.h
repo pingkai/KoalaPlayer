@@ -3,8 +3,8 @@
  *
  *
  */
-#ifndef KOALA_DEMUXER_AUDIO_H
-#define KOALA_DEMUXER_AUDIO_H
+#ifndef KOALA_DECODER_AUDIO_H
+#define KOALA_DECODER_AUDIO_H
 #ifdef __cplusplus
 extern "C"
 {

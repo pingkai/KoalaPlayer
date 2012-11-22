@@ -6,7 +6,7 @@
 
 
 #ifdef ANDROID
-#define LOG_TAG "koala_demuxer"
+#define LOG_TAG "koala_decoder_audio"
 #include <utils/Log.h>
 #define printf ALOGE
 #endif

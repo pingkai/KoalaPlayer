@@ -8,7 +8,8 @@ LOCAL_STATIC_LIBRARIES :=  \
                 libavutil
 LOCAL_SRC_FILES:=                 \
 		koala_demuxer.c    \
-		koala_decoder_audio.c
+		koala_decoder_audio.c\
+		koala_decoder_video.c
 
 LOCAL_C_INCLUDES:=
 
