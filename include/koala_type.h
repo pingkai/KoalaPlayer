@@ -21,7 +21,7 @@ enum KoalaCodecID{
 	
 	KOALA_CODEC_ID_H264,
 	KOALA_CODEC_ID_MPEG4,
-
+    KOALA_CODEC_ID_RV40,
 	
 	KOALA_CODEC_ID_AAC,
 	KOALA_CODEC_ID_MP3,
@@ -31,8 +31,16 @@ typedef struct{
     int nChannles;
     int sample_rate;
     int sample_fmt;
-    
+
 }audio_info;
+
+typedef struct{
+    int pix_fmt;
+    int width;
+    int height;
+
+}video_info;
+
 
 
 typedef struct {
@@ -61,5 +69,6 @@ typedef struct {
 #define MAX_AUDIO_FRAME_SIZE 192000
 
 typedef int  (*decoder_buf_callback) (unsigned char *buffer, int size,long long pts,void *CbpHandle);
+typedef int  (*decoder_buf_callback_video)(unsigned char *buffer[], int linesize[],long long pts,void *CbpHandle);
 
 #endif

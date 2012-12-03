@@ -28,11 +28,32 @@ typedef struct koala_decoder_handle_v_t{
 	AVPacket * pkt;
     AVFrame *picture;
 
-	decoder_buf_callback audio_cb;
+	decoder_buf_callback_video video_cb;
 	void * CbpHandle;
 }koala_decoder_handle_v;
 
 void close_decoder_video(koala_decoder_handle_v* pHandle);
+
+int reg_video_decoder_cb(koala_decoder_handle_v *pHandle,decoder_buf_callback_video cb,void *CbpHandle){
+	if (!pHandle || !cb){
+		printf("%s:%d error\n",__FILE__,__LINE__);
+		return -1;
+	}
+	pHandle->video_cb = cb;
+	pHandle->CbpHandle = CbpHandle;
+	return 0;
+
+}
+
+int get_video_info(koala_decoder_handle_v* pHandle,video_info *info){
+    
+    if (info){
+        info->pix_fmt = pHandle->vc->pix_fmt;
+        info->width   = pHandle->vc->width;
+        info->height  = pHandle->vc->height;
+    }
+    return 0;
+}
 
 koala_decoder_handle_v* init_decoder_video(void *codec_cont){
     koala_decoder_handle_v *pHandle = (koala_decoder_handle_v *)malloc(sizeof(koala_decoder_handle_v));
@@ -78,6 +99,7 @@ int koala_ffmpeg_decode_video_pkt(koala_decoder_handle_v* pHandle,uint8_t *data,
     static int frame = 0;
     pHandle->pkt->size = size;
     pHandle->pkt->data = data;
+    pHandle->pkt->pts = pts;
     while (pHandle->pkt->size > 0) {
         len = avcodec_decode_video2(pHandle->vc, pHandle->picture, &got_picture, pHandle->pkt);
         if (len < 0) {
@@ -86,17 +108,21 @@ int koala_ffmpeg_decode_video_pkt(koala_decoder_handle_v* pHandle,uint8_t *data,
         }
         if (got_picture) {
          //   printf("saving frame %3d\n", frame);
-            fflush(stdout);
-            printf("pHandle->vc->pix_fmt is %d\n",pHandle->vc->pix_fmt);
-            printf("pHandle->picture->linesize[0] is %d\n",pHandle->picture->linesize[0]);
-            printf("pHandle->picture->linesize[1] is %d\n",pHandle->picture->linesize[1]);
-            printf("pHandle->picture->linesize[2] is %d\n",pHandle->picture->linesize[2]);
-            printf("pHandle->picture->linesize[3] is %d\n",pHandle->picture->linesize[3]);
-            printf("width is %d height is %d\n",pHandle->vc->width,pHandle->vc->height);
+        //    fflush(stdout);
+            if (pHandle->video_cb){
+                pHandle->video_cb(pHandle->picture->data,pHandle->picture->linesize,pHandle->picture->pkt_pts,pHandle->CbpHandle);
+            }else{
+                printf("pHandle->vc->pix_fmt is %d\n",pHandle->vc->pix_fmt);
+                printf("pHandle->picture->linesize[0] is %d\n",pHandle->picture->linesize[0]);
+                printf("pHandle->picture->linesize[1] is %d\n",pHandle->picture->linesize[1]);
+                printf("pHandle->picture->linesize[2] is %d\n",pHandle->picture->linesize[2]);
+                printf("pHandle->picture->linesize[3] is %d\n",pHandle->picture->linesize[3]);
+                printf("width is %d height is %d\n",pHandle->vc->width,pHandle->vc->height);
+            }
             /* the picture is allocated by the decoder. no need to
                free it */
        //    snprintf(buf, sizeof(buf), outfilename, frame);
-      //      pgm_save(pHandle->picture->data[0], pHandle->picture->linesize[0],
+        //    pgm_save(pHandle->picture->data[0], pHandle->picture->linesize[0],
        //              pHandle->vc->width, pHandle->vc->height, buf);
             frame++;
         }

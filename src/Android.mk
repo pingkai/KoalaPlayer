@@ -21,7 +21,8 @@ LOCAL_COPY_HEADERS_TO := libkoala
 LOCAL_COPY_HEADERS := \
 		../include/koala_demuxer.h \
 		../include/koala_type.h   \
-		../include/koala_decoder_audio.h
+		../include/koala_decoder_audio.h\
+		../include/koala_decoder_video.h
 ifeq ($(TARGET_ARCH),arm)
     LOCAL_CFLAGS += -Wno-psabi
 endif

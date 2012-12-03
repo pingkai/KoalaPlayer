@@ -32,6 +32,7 @@ typedef struct koala_decoder_handle_t{
 	decoder_buf_callback audio_cb;
 	void * CbpHandle;
 }koala_decoder_handle;
+void close_decoder_audio(koala_decoder_handle* pHandle);
 
 int reg_audio_decoder_cb(koala_decoder_handle *pHandle,decoder_buf_callback cb,void *CbpHandle){
 	if (!pHandle || !cb){
@@ -47,7 +48,7 @@ int reg_audio_decoder_cb(koala_decoder_handle *pHandle,decoder_buf_callback cb,v
 int koala_ffmpeg_decode_audio_pkt(koala_decoder_handle* pHandle,uint8_t *data,int size,long long pts){
 	int out_size, len;
 	int sendpts = 1;
-	int err;
+	int err =0;
 	if (!pHandle ||!pHandle->audioOutBuf){
 		printf("%s:%d error\n",__FILE__,__LINE__);
 		return -1;
@@ -57,7 +58,7 @@ int koala_ffmpeg_decode_audio_pkt(koala_decoder_handle* pHandle,uint8_t *data,in
     pHandle->pkt->pts  = pts;
 	while (pHandle->pkt->size > 0) {
 		out_size = MAX_AUDIO_FRAME_SIZE;
-		len = avcodec_decode_audio3(pHandle->ac, pHandle->audioOutBuf, &out_size, pHandle->pkt);
+		len = avcodec_decode_audio3(pHandle->ac,(short*) pHandle->audioOutBuf, &out_size, pHandle->pkt);
 		if (len < 0) {
 			printf("Error while decoding\n");
 			break;
@@ -182,7 +183,7 @@ int koala_resample_audio(ReSampleContext * s,short * input,short * output,int nb
     int ret;
     ret = audio_resample(s,output,input,nb_samples);
     return ret;
-   
+
 }
 
 int koala_resample_auido_close(ReSampleContext * s){

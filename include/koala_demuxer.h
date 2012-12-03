@@ -30,7 +30,13 @@ int set_demuxer_mode(koala_handle *pHandle,demux_mode_e mode);
 int open_stream(koala_handle *pHandle,int index);
 
 int open_video(koala_handle *pHandle,int index);
-int demux_seek(koala_handle *pHandle,int64_t timems,int stream_id);
+int demux_seek(koala_handle *pHandle,int64_t timems,int stream_id,int flag);
+
+int koala_demux_pre_read_packet(koala_handle *pHandle);
+
+
+int koala_demux_read_packet_data(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pStream,int64_t *pPts,int *pFlag);
+
 
 int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pStream,int64_t *pPts,int *pFlag);
 

@@ -53,6 +53,9 @@ typedef struct koala_handle_t{
 	int pkt_cache_buf_stream_index;
 	int64_t lastpts;
 
+    //for read two
+    int preread;
+
 	
 	AVFormatContext *oc; //raw audio data to es use it
 	AVStream * ast; //raw audio data to es use it
@@ -257,16 +260,23 @@ static enum KoalaCodecID avcodec2Koalacodec(enum AVCodecID codec_id){
 	switch(codec_id){
 		case AV_CODEC_ID_H264:
 			return KOALA_CODEC_ID_H264;
+
 		case AV_CODEC_ID_AAC:
 		case AV_CODEC_ID_AAC_LATM:
 			return KOALA_CODEC_ID_AAC;
+
 		case AV_CODEC_ID_MP3:
 			return KOALA_CODEC_ID_MP3;
+
 		case AV_CODEC_ID_APE:
-		case AV_CODEC_ID_COOK:	
+		case AV_CODEC_ID_COOK:
 			return KOALA_CODEC_ID_APE;
+
 		case AV_CODEC_ID_MPEG4:
 			return KOALA_CODEC_ID_MPEG4;
+
+        case AV_CODEC_ID_RV40:
+            return KOALA_CODEC_ID_RV40;
 		default:
 			break;
 	}
@@ -485,7 +495,7 @@ int open_video(koala_handle *pHandle,int index){
 
 // TODO: deal with malloc error
 
-int demux_seek(koala_handle *pHandle,int64_t timems,int stream_id){
+int demux_seek(koala_handle *pHandle,int64_t timeus,int stream_id,int flag){
 	int ret;
 	int64_t timestamp;
 	if (pHandle == NULL)
@@ -498,23 +508,185 @@ int demux_seek(koala_handle *pHandle,int64_t timems,int stream_id){
 			pHandle->pkt_cache_buf_size = 0;
 	}
 	if (stream_id == pHandle->audio_stream){
-		printf("%s:%d timems is %lld pHandle->a_time_base is %d\n",__FILE__,__LINE__,timems,pHandle->a_time_base);
-		timestamp = (timems/1000) * pHandle->a_time_base;
+		printf("%s:%d timems is %lld pHandle->a_time_base is %d\n",__FILE__,__LINE__,timeus,pHandle->a_time_base);
+		timestamp = (timeus * pHandle->a_time_base)/1000000;
 		
 	}else if (stream_id == pHandle->video_stream){
-		printf("%s:%d timems is %lld pHandle->v_time_base is %d\n",__FILE__,__LINE__,timems,pHandle->v_time_base);
-		timestamp = (timems/1000) * pHandle->v_time_base;
+		printf("%s:%d timems is %lld pHandle->v_time_base is %d\n",__FILE__,__LINE__,timeus,pHandle->v_time_base);
+		timestamp = (timeus * pHandle->v_time_base)/1000000;
 	
 	}
 	else{
 		stream_id = -1;
-		timestamp = timems/1000;
+		timestamp = timeus/1000000;
 	}
 	printf("%s:%d timestamp is %lld stream_id is %d\n",__func__,__LINE__,timestamp,stream_id);
-	ret = avformat_seek_file(pHandle->ctx, stream_id, INT64_MIN, timestamp, timestamp, 0);
-//	ret = avformat_seek_file(pHandle->ctx, stream_id, timestamp, timestamp, INT64_MAX, 0);
+    if (!flag)
+	    ret = avformat_seek_file(pHandle->ctx, stream_id, INT64_MIN, timestamp, timestamp, 0);
+    else
+        ret = avformat_seek_file(pHandle->ctx, stream_id, timestamp, timestamp, INT64_MAX, 0);
 	return ret;
 
+}
+
+int koala_demux_pre_read_packet(koala_handle *pHandle){
+    int err;
+    if (pHandle == NULL)
+        return -1;
+    if (pHandle->preread){
+        printf("prereaded\n");
+        return -1;
+    }
+	do{
+		// TODO: How to deal with  interrupt ?
+		if (interrupt_cb(pHandle)){
+			printf("%s:%d interrupt\n",__FILE__,__LINE__);
+			break;
+		}
+		// TODO: when be interrupt return what? AVERROR_EXIT? How to deal with it?
+		err = av_read_frame(pHandle->ctx, pHandle->pkt);
+		if (err < 0){
+            char errbuf[50];
+            av_strerror(err, errbuf, sizeof(errbuf));
+			printf("%s:%d: %s\n",__FILE__,__LINE__,errbuf);
+			if (err == AVERROR_EOF &&(pHandle->oc != NULL )){
+				int ret;
+				ret = av_write_frame(pHandle->oc,NULL);
+				if (ret == 0){
+		//			if (pPts)
+		//				*pPts = -1;
+		//			if (pStream)
+		//				*pStream = pHandle->audio_stream;
+		//			if (pFlag)
+		//				*pFlag = 1;
+					return 0;
+				}
+			}
+			return -1;
+		}
+        if (pHandle->pkt->stream_index != pHandle->video_stream
+            &&pHandle->pkt->stream_index != pHandle->audio_stream){
+            printf("other data skip\n");
+            av_free_packet(pHandle->pkt);
+			continue;
+        }
+		if (pHandle->demux_mode == DEMUX_MODE_I_FRAME){
+			if (pHandle->pkt->stream_index != pHandle->video_stream
+				||(pHandle->pkt->flags &AV_PKT_FLAG_KEY) == 0
+				){
+				printf("getting a keyframe\n");
+				av_free_packet(pHandle->pkt);
+				continue;
+			}
+		}
+        break;
+    }while(1);
+    pHandle->preread = 1;
+    if (pHandle->pkt->stream_index == pHandle->video_stream)
+        return pHandle->pkt->size + pHandle->vc->extradata_size;
+    else
+        return pHandle->pkt->size + pHandle->ac->extradata_size;
+}
+
+int koala_demux_read_packet_data(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pStream,int64_t *pPts,int *pFlag){
+    int err;
+    int size;
+    int keyframe = 0;
+    int in_buf_ptr = 0;
+  //  uint8_t startcode[4] = {0,0,0,1};
+    if (pHandle == NULL)
+        return -1;
+    if (pHandle->preread == 0){
+        printf("Need preread\n");
+     //   size = koala_demux_pre_read_packet(pHandle);
+     //   return demux_read_packet(pHandle,pBuffer,pSize,pStream,pPts);
+        return -1;
+    }
+    pHandle->preread = 0;
+    if (pHandle->pkt->stream_index == pHandle->video_stream)
+        size = pHandle->pkt->size + pHandle->vc->extradata_size;
+    else
+        size = pHandle->pkt->size + pHandle->ac->extradata_size;
+
+    if (*pSize < size){
+        printf("pSize is error\n");
+        return -1;
+    }
+
+    if (pStream){
+        *pStream = pHandle->pkt->stream_index;
+    //    pHandle->pkt_cache_buf_stream_index = *pStream;
+    }
+    if (pFlag)
+        *pFlag = pHandle->pkt->flags &AV_PKT_FLAG_KEY;
+
+    if (pHandle->pkt->stream_index == pHandle->video_stream){
+        if (pHandle->pkt->flags &AV_PKT_FLAG_KEY)
+            keyframe = 1;
+        else
+            keyframe = 0;
+        pHandle->pkt->pts = pHandle->pkt->pts*1000000 /pHandle->v_time_base;//us
+        if (pPts)
+            *pPts = pHandle->pkt->pts;
+     //       pHandle->lastpts = pHandle->pkt->pts;
+    //  printf("video pHandle->pkt->size is %d\n",pHandle->pkt->size);
+        if (pHandle->vc->codec_id == AV_CODEC_ID_MPEG4 && keyframe &&pHandle->mp4_vol){
+            memcpy(pBuffer+ in_buf_ptr ,pHandle->vc->extradata ,pHandle->vc->extradata_size);
+            in_buf_ptr += pHandle->vc->extradata_size;
+        }else
+        if (pHandle->write_h264_sps_pps /*&& keyframe*/){
+            AVPacket new_pkt = *pHandle->pkt;
+            int a = av_bitstream_filter_filter(pHandle->avcbsfc, pHandle->vc, NULL,
+                                               &new_pkt.data, &new_pkt.size,
+                                               pHandle->pkt->data, pHandle->pkt->size,
+                                               pHandle->pkt->flags & AV_PKT_FLAG_KEY);
+            if (a > 0) {
+                av_free_packet(pHandle->pkt);
+                new_pkt.destruct = av_destruct_packet;
+            } else if (a < 0) {
+                av_log(NULL, AV_LOG_ERROR, "%s failed for stream %d, codec %s",
+                       pHandle->avcbsfc->filter->name, pHandle->pkt->stream_index,
+                       pHandle->vc->codec ? pHandle->vc->codec->name : "copy");
+                av_free_packet(pHandle->pkt);
+                new_pkt.destruct = av_destruct_packet;
+                av_free_packet(&new_pkt);
+                return -1;
+            }
+            *pHandle->pkt = new_pkt;
+            memcpy(pBuffer + (in_buf_ptr),pHandle->pkt->data,pHandle->pkt->size);
+            in_buf_ptr += pHandle->pkt->size;
+
+        }
+        else{
+            memcpy(pBuffer + in_buf_ptr,pHandle->pkt->data,pHandle->pkt->size);
+            in_buf_ptr += pHandle->pkt->size;
+        }
+        *pSize = in_buf_ptr;
+    }
+    else if (pHandle->pkt->stream_index == pHandle->audio_stream){
+
+            pHandle->pPkt_buf = pBuffer;
+	        pHandle->pPkt_buf_size  = pSize;
+    //  printf("audio pHandle->pkt->size is %d\n",pHandle->pkt->size);
+        if (pHandle->ac->codec_id == AV_CODEC_ID_AAC 
+            &&((AV_RB16(pHandle->pkt->data) & 0xfff0) != 0xfff0)
+            && pHandle->wrape_aac2adts){
+            pHandle->pkt->stream_index = pHandle->ast->index;
+            av_write_frame(pHandle->oc,pHandle->pkt);
+            pHandle->pkt->stream_index = pHandle->audio_stream;
+        }else{
+            memcpy(pBuffer + in_buf_ptr,pHandle->pkt->data,pHandle->pkt->size);
+            in_buf_ptr += pHandle->pkt->size;
+            *pSize = in_buf_ptr;
+        }
+        if (pPts)
+            *pPts = pHandle->pkt->pts*1000000/pHandle->a_time_base;
+    }else{
+    // error
+        printf("ERROR\n");
+        return -1;
+    }
+    return 0;
 }
 int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pStream,int64_t *pPts,int *pFlag){
 	int err;
@@ -582,6 +754,7 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 			if (pHandle->pkt->stream_index != pHandle->video_stream
 				||(pHandle->pkt->flags &AV_PKT_FLAG_KEY) == 0
 				)
+				av_free_packet(pHandle->pkt);
 				continue;
 		}
 		if (pStream){
@@ -596,7 +769,7 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 				keyframe = 1;
 			else
 				keyframe = 0;
-			pHandle->pkt->pts = pHandle->pkt->pts*1000 /pHandle->v_time_base;//ms
+			pHandle->pkt->pts = pHandle->pkt->pts*1000000 /pHandle->v_time_base;//us
 			if (pPts)
 				*pPts = pHandle->pkt->pts;
 				pHandle->lastpts = pHandle->pkt->pts;
@@ -682,7 +855,7 @@ int demux_read_packet(koala_handle *pHandle,uint8_t *pBuffer,int *pSize,int * pS
 				}
 			}
 			if (pPts)
-				*pPts = pHandle->pkt->pts*1000/pHandle->a_time_base;
+				*pPts = pHandle->pkt->pts*1000000/pHandle->a_time_base;
 			pHandle->lastpts = *pPts;
 			break;
 		}else
